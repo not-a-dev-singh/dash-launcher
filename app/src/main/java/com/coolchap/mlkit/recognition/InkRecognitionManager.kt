@@ -1,4 +1,4 @@
-package io.github.not-a-dev-singh.recognition
+package io.github.dashLauncher.recognition
 
 import android.util.Log
 import com.google.mlkit.common.model.DownloadConditions
@@ -37,9 +37,16 @@ class InkRecognitionManager {
             .addOnFailureListener { Log.e(TAG, "Model download failed: ${it.message}") }
     }
 
+    // monotonically increasing counter; used to discard results from earlier strokes
+    // that arrive after a newer recognition has already been dispatched
+    private var lastRecognitionSeq = 0
+
     fun recognize(ink: Ink) {
+        val seq = ++lastRecognitionSeq
         recognizer?.recognize(ink)
             ?.addOnSuccessListener { result ->
+                // a higher seq means a newer call was made; this result is stale
+                if (seq < lastRecognitionSeq) return@addOnSuccessListener
                 val candidates = result.candidates.map { it.text }
                 onResults?.invoke(candidates)
             }

@@ -1,4 +1,4 @@
-package io.github.not-a-dev-singh.ui
+package io.github.dashLauncher.ui
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
@@ -9,9 +9,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import io.github.not-a-dev-singh.LauncherState
-import io.github.not-a-dev-singh.data.AppInfo
-import io.github.not-a-dev-singh.recognition.InkRecognitionManager
+import io.github.dashLauncher.LauncherState
+import io.github.dashLauncher.data.AppInfo
+import io.github.dashLauncher.recognition.InkRecognitionManager
 
 @Composable
 fun LauncherRoot(
@@ -25,9 +25,16 @@ fun LauncherRoot(
     onPinApp: (String, Int) -> Unit,
     onUnpinApp: (Int) -> Unit,
     onCommitActiveScribble: () -> Unit,
-    onSetEditMode: (Boolean) -> Unit
+    onSetEditMode: (Boolean) -> Unit,
+    // Drag-to-reorder callback: called with (fromIndex, toIndex) when the user
+    // drops a pinned slot onto another. Routes to LauncherViewModel.swapPinnedSlots().
+    onSwapPinnedSlots: (Int, Int) -> Unit
 ) {
     var appToPin by remember { mutableStateOf<AppInfo?>(null) }
+    // True while the user is dragging a pinned slot. DrawingOverlay reads this
+    // to skip event interception so detectDragGesturesAfterLongPress in
+    // PinnedAppsSection can receive move events unobstructed.
+    var isPinDragActive by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -41,22 +48,32 @@ fun LauncherRoot(
             recognizedText = state.recognizedText,
             onSwipeUp = onSwipeUp,
             onBackspace = onBackspace,
-            onCommitActiveScribble = onCommitActiveScribble
+            onCommitActiveScribble = onCommitActiveScribble,
+            isInputSuspended = { isPinDragActive }
         ) {
             Column(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.Bottom
             ) {
-                // Recognized text bar at the top
-                if (state.recognizedText.isNotEmpty()) {
-                    RecognizedTextBar(
-                        text = state.recognizedText,
-                        onClear = {
-                            onClearScribble()
-                            appToPin = null
-                            onSetEditMode(false)
-                        }
-                    )
+                // Fixed-height top bar zone (56 dp).
+                // Provides status-bar clearance and a reserved slot for future title/settings.
+                // When a scribble is active it shows the recognized text in-place;
+                // the rest of the layout never shifts because the box height is constant.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
+                    if (state.recognizedText.isNotEmpty()) {
+                        RecognizedTextBar(
+                            text = state.recognizedText,
+                            onClear = {
+                                onClearScribble()
+                                appToPin = null
+                                onSetEditMode(false)
+                            }
+                        )
+                    }
                 }
 
                 // Main App List (Suggestions or Recent)
@@ -130,52 +147,47 @@ fun LauncherRoot(
                     },
                     onRemoveClick = { index ->
                         onUnpinApp(index)
-                    }
+                    },
+                    // Drag-to-reorder: only active when no pin-assignment flow is in progress
+                    // to avoid conflicting with the appToPin tap-to-select interaction.
+                    onSwapSlots = { from, to ->
+                        if (appToPin == null) onSwapPinnedSlots(from, to)
+                    },
+                    onDragStarted = { isPinDragActive = true },
+                    onDragEnded = { isPinDragActive = false }
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
 
-        // All apps overlay
+        // All apps overlay — uses AllAppsScreen which owns the inline Pin/Unpin buttons
         AnimatedVisibility(
             visible = state.showAllApps,
             enter = slideInVertically(initialOffsetY = { it }),
             exit = slideOutVertically(targetOffsetY = { it })
         ) {
-            Surface(color = Color.Black, modifier = Modifier.fillMaxSize()) {
-                Column {
-                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                        Text(
-                            "All Apps", 
-                            color = Color.White,
-                            style = MaterialTheme.typography.headlineMedium
-                        )
-                        TextButton(
-                            onClick = onDismissAllApps,
-                            modifier = Modifier.align(Alignment.CenterEnd)
-                        ) {
-                            Text("Back", color = Color.Gray)
-                        }
-                    }
-                    AppList(
-                        apps = state.allApps,
-                        onAppClick = { pkg ->
-                            if (appToPin != null) {
-                                appToPin = null
-                            } else {
-                                onAppClick(pkg)
-                                onDismissAllApps()
-                            }
-                        },
-                        onAppLongClick = { app ->
-                            appToPin = app
-                            onSetEditMode(true)
-                            onDismissAllApps()
-                        }
-                    )
+            val pinnedPackages = state.pinnedApps.mapNotNull { it?.packageName }
+            AllAppsScreen(
+                apps = state.allApps,
+                pinnedPackages = pinnedPackages,
+                onAppClick = { pkg ->
+                    onAppClick(pkg)
+                    onDismissAllApps()
+                },
+                onDismiss = onDismissAllApps,
+                onPinApp = { pkg ->
+                    // reuse the same appToPin flow: user taps a slot on the home screen
+                    appToPin = state.allApps.find { it.packageName == pkg }
+                    onSetEditMode(true)
+                    onDismissAllApps()
+                },
+                onUnpinApp = { pkg ->
+                    // resolve slot index here so AllAppsScreen stays package-agnostic
+                    val index = state.pinnedApps.indexOfFirst { it?.packageName == pkg }
+                    if (index != -1) onUnpinApp(index)
                 }
-            }
+            )
         }
     }
 }

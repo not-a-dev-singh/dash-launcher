@@ -1,4 +1,4 @@
-package io.github.not-a-dev-singh.ui
+package io.github.dashLauncher.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*

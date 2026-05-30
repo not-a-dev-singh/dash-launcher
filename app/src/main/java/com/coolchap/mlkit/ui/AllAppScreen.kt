@@ -1,4 +1,4 @@
-package io.github.not-a-dev-singh.ui
+package io.github.dashLauncher.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -12,7 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.not-a-dev-singh.data.AppInfo
+import io.github.dashLauncher.data.AppInfo
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.Alignment
@@ -37,14 +37,23 @@ fun AllAppsScreen(
                     if (dragAmount > 30) onDismiss() // swipe down to dismiss
                 }
             }
-            .padding(horizontal = 16.dp, vertical = 24.dp)
+            .padding(horizontal = 16.dp)  // vertical padding replaced by the 56dp header zone
     ) {
-        Text(
-            text = "All Apps",
-            color = Color.White.copy(alpha = 0.5f),
-            fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        // Fixed-height top bar zone — same 56dp as home screen so both screens share
+        // the same visual rhythm; "All Apps" title sits here, leaving room for
+        // a future back button or settings icon in the same row.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text(
+                text = "All Apps",
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = 12.sp
+            )
+        }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items(apps) { app ->

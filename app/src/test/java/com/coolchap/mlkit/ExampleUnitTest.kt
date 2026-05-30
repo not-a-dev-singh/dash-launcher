@@ -1,4 +1,4 @@
-package io.github.not-a-dev-singh
+package io.github.dashLauncher
 
 import org.junit.Test
 

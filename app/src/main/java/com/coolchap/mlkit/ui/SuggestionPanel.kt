@@ -1,4 +1,4 @@
-package io.github.not-a-dev-singh.ui
+package io.github.dashLauncher.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -15,7 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
-import io.github.not-a-dev-singh.data.AppInfo
+import io.github.dashLauncher.data.AppInfo
 
 @Composable
 fun SuggestionsPanel(

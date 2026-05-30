@@ -1,5 +1,5 @@
 /*
-package io.github.not-a-dev-singh
+package io.github.dashLauncher
 
 import android.os.Bundle
 import android.util.Log

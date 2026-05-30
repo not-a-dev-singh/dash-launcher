@@ -1,4 +1,4 @@
-package io.github.not-a-dev-singh.ui.theme
+package io.github.dashLauncher.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle

@@ -4,7 +4,7 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import io.github.not-a-dev-singh.data.AppInfo
+import io.github.dashLauncher.data.AppInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -75,5 +75,21 @@ class AppRepository(private val context: Context) {
             current[index] = ""
             savePinnedPackages(current)
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // DRAG-TO-REORDER: swap two pinned slots by index.
+    // Swap semantics: fromIndex and toIndex exchange their package names.
+    // Either slot may be empty (""). If from == to, the call is a no-op.
+    // Called by LauncherViewModel.swapPinnedSlots() after a drag-drop gesture.
+    // -------------------------------------------------------------------------
+    fun swapPinnedSlots(fromIndex: Int, toIndex: Int) {
+        if (fromIndex == toIndex) return
+        val current = getPinnedPackages().toMutableList()
+        if (fromIndex !in current.indices || toIndex !in current.indices) return
+        val temp = current[fromIndex]
+        current[fromIndex] = current[toIndex]
+        current[toIndex] = temp
+        savePinnedPackages(current)
     }
 }

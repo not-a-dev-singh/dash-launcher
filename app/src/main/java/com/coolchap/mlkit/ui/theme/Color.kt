@@ -1,4 +1,4 @@
-package io.github.not-a-dev-singh.ui.theme
+package io.github.dashLauncher.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "io.github.not-a-dev-singh"
+    namespace = "io.github.dashLauncher"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -12,7 +12,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "io.github.not-a-dev-singh"
+        applicationId = "io.github.dashLauncher"
         minSdk = 28
         targetSdk = 36
         versionCode = 1

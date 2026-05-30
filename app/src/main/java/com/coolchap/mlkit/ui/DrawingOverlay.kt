@@ -1,4 +1,4 @@
-package io.github.not-a-dev-singh.ui
+package io.github.dashLauncher.ui
 
 import android.view.MotionEvent
 import androidx.compose.foundation.Canvas
@@ -14,8 +14,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import io.github.not-a-dev-singh.gesture.GestureHandler
-import io.github.not-a-dev-singh.recognition.InkRecognitionManager
+import com.google.mlkit.vision.digitalink.recognition.Ink
+import io.github.dashLauncher.gesture.GestureHandler
+import io.github.dashLauncher.recognition.InkRecognitionManager
 import kotlin.math.abs
 
 data class DrawPoint(val x: Float, val y: Float, val isStart: Boolean)
@@ -29,6 +30,14 @@ fun DrawingOverlay(
     onSwipeUp: () -> Unit,
     onBackspace: () -> Unit,
     onCommitActiveScribble: () -> Unit,
+    // When this returns true, the overlay stops intercepting and forwarding touch events
+    // so that child gesture detectors (e.g. drag-to-reorder on pinned slots) can operate
+    // without DrawingOverlay consuming their move events after the 8dp slop threshold.
+    // Using a lambda (not a plain Boolean) so the coroutine reads the CURRENT value at
+    // event time — a plain Boolean captured at composition time would be stale because
+    // rememberUpdatedState only syncs after the next recomposition frame, which may not
+    // have run yet when the first drag MOVE event arrives after onDragStart fires.
+    isInputSuspended: () -> Boolean = { false },
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -38,12 +47,20 @@ fun DrawingOverlay(
     val touchSlopPx = with(density) { 8.dp.toPx() }
 
     val idleHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+    // rememberUpdatedState ensures the Runnable always calls the latest lambda reference
+    // even when the parent recomposes with a new onCommitActiveScribble instance
+    val currentOnCommitActiveScribble = rememberUpdatedState(onCommitActiveScribble)
     val idleRunnable = remember {
         Runnable {
             points.clear()
             gestureHandler.reset()
-            onCommitActiveScribble()
+            currentOnCommitActiveScribble.value()
         }
+    }
+    // holds the latest Ink before the debounced recognize call fires
+    val pendingInk = remember { arrayOfNulls<Ink>(1) }
+    val recognizeRunnable = remember {
+        Runnable { pendingInk[0]?.let { inkManager.recognize(it) } }
     }
 
     LaunchedEffect(recognizedText) {
@@ -54,16 +71,49 @@ fun DrawingOverlay(
         }
     }
 
-    LaunchedEffect(Unit) {
+    // SideEffect runs after every recomposition, keeping gesture callbacks fresh
+    // so a new lambda reference from the parent is never stale inside GestureHandler
+    SideEffect {
         gestureHandler.onSwipeUp = onSwipeUp
-        gestureHandler.onBackspace = onBackspace
 
+        // ---------------------------------------------------------------------
+        // BACKSPACE GESTURE — orchestration layer
+        // Responsibility: clean up all in-flight UI and ink state BEFORE the
+        // ViewModel is told to drop a character. Order matters:
+        //   1. Cancel pending recognize/idle timers — prevent a stale recognition
+        //      result from arriving after the character has already been removed.
+        //   2. Clear pendingInk — drop any buffered ink that hasn't been sent yet.
+        //   3. Clear canvas draw-points — erase the visible stroke trail.
+        //   4. gestureHandler.reset() — wipe inkBuilder so the next scribble does
+        //      not append to strokes from before the backspace.
+        //   5. onBackspace() — notify ViewModel to drop the last character.
+        // WARNING: do NOT reorder these steps or skip the reset() call.
+        // Skipping reset() is what caused "consecutive backspaces always fail":
+        // the old ink accumulated and ML Kit returned the old word again.
+        // ---------------------------------------------------------------------
+        gestureHandler.onBackspace = {
+            idleHandler.removeCallbacks(recognizeRunnable)
+            idleHandler.removeCallbacks(idleRunnable)
+            pendingInk[0] = null
+            points.clear()
+            gestureHandler.reset()  // clears inkBuilder — MUST come before onBackspace()
+            onBackspace()           // notifies LauncherViewModel — see backspace() there
+        }
+        // ---------------------------------------------------------------------
+    }
+
+    LaunchedEffect(Unit) {
         gestureHandler.onDrawPoint = { x, y, isStart ->
             points.add(DrawPoint(x, y, isStart))
         }
 
         gestureHandler.onInkStrokeAdded = { ink ->
-            inkManager.recognize(ink)
+            // 150ms debounce before recognizing: lets multi-stroke characters (e.g. 'i', 't')
+            // finish their second stroke before recognition fires, reducing partial results
+            pendingInk[0] = ink
+            idleHandler.removeCallbacks(recognizeRunnable)
+            idleHandler.postDelayed(recognizeRunnable, 150)
+            // separate 1s idle timer to commit the full scribbled word
             idleHandler.removeCallbacks(idleRunnable)
             idleHandler.postDelayed(idleRunnable, 1000)
         }
@@ -76,7 +126,9 @@ fun DrawingOverlay(
     }
 
     Box(
-        modifier = modifier.pointerInput(recognizedText) {
+        // Unit key: Compose won't cancel in-flight touch tracking when recognizedText
+        // updates mid-stroke; callbacks stay current via SideEffect above
+        modifier = modifier.pointerInput(Unit) {
             awaitPointerEventScope {
                 while (true) {
                     val downEvent = awaitPointerEvent(PointerEventPass.Initial)
@@ -85,7 +137,9 @@ fun DrawingOverlay(
                     var isIntercepted = false
 
                     val downMotionEvent = downEvent.motionEvent
-                    if (downMotionEvent != null) {
+                    // Skip forwarding while a pin drag is active — prevents the overlay
+                    // from classifying the drag start as an ink stroke.
+                    if (downMotionEvent != null && !isInputSuspended()) {
                         idleHandler.removeCallbacks(idleRunnable)
                         gestureHandler.onTouchEvent(downMotionEvent)
                     }
@@ -114,7 +168,13 @@ fun DrawingOverlay(
                         val diffX = abs(change.position.x - startPos.x)
                         val diffY = abs(change.position.y - startPos.y)
 
-                        if (!isIntercepted && (diffX > touchSlopPx || diffY > touchSlopPx)) {
+                        // Do not intercept while a pin drag is active — this is the critical
+                        // guard. Without it, the first 8dp of finger movement after a long-press
+                        // sets isIntercepted = true and DrawingOverlay consumes all subsequent
+                        // move events, silently aborting detectDragGesturesAfterLongPress.
+                        if (!isIntercepted && !isInputSuspended() &&
+                            (diffX > touchSlopPx || diffY > touchSlopPx)
+                        ) {
                             isIntercepted = true
                         }
 

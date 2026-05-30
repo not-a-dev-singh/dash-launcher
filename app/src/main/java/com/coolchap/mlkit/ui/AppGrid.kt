@@ -1,35 +1,42 @@
 @file:OptIn(ExperimentalFoundationApi::class)
 
-package io.github.not-a-dev-singh.ui
+package io.github.dashLauncher.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
-import io.github.not-a-dev-singh.data.AppInfo
+import io.github.dashLauncher.data.AppInfo
 
 @Composable
 fun AppList(
@@ -85,6 +92,29 @@ fun AppRow(
     }
 }
 
+// =============================================================================
+// DRAG-TO-REORDER: PinnedAppsSection
+//
+// Interaction model:
+//   1. Long-press a filled slot  → drag begins; slot dims to 40% opacity.
+//   2. Drag over another slot    → target slot shows a white highlight ring.
+//   3. Release over a slot       → swap the two slots via onSwapSlots(from, to).
+//   4. Release outside all slots → drag is cancelled; nothing changes.
+//
+// How hit-testing works:
+//   Each PinnedAppSlot records its position and size into slotRects[] via
+//   onGloballyPositioned. During drag, the current pointer offset is compared
+//   against every rect to find which slot the finger is over. This avoids
+//   complex nested pointer-input scopes and works correctly with the Row layout.
+//
+// State that drives visuals (local to this composable, not in ViewModel):
+//   dragFromIndex  — index of the slot being dragged (-1 = no drag active)
+//   dragOverIndex  — index of the slot currently under the finger (-1 = none)
+//
+// WARNING: do NOT move dragFromIndex / dragOverIndex into LauncherState.
+// They are purely transient visual state; persisting them would cause the
+// drag ghost to survive configuration changes.
+// =============================================================================
 @Composable
 fun PinnedAppsSection(
     pinnedApps: List<AppInfo?>,
@@ -92,11 +122,32 @@ fun PinnedAppsSection(
     isEditMode: Boolean = false,
     onAppClick: (String) -> Unit,
     onSlotLongClick: (Int) -> Unit,
-    onRemoveClick: (Int) -> Unit
+    onRemoveClick: (Int) -> Unit,
+    onSwapSlots: (fromIndex: Int, toIndex: Int) -> Unit,
+    // Callbacks so LauncherRoot can suspend DrawingOverlay for the duration of a drag,
+    // preventing the overlay from consuming drag move events after the 8dp slop.
+    onDragStarted: () -> Unit = {},
+    onDragEnded: () -> Unit = {}
 ) {
-    val columns = 5
-    val rows = 2
-    
+    val columns = 4
+    val rows = 1
+    val totalSlots = columns * rows
+
+    // Track drag state locally — these never need to survive recomposition
+    var dragFromIndex by remember { mutableIntStateOf(-1) }
+    var dragOverIndex by remember { mutableIntStateOf(-1) }
+
+    // slotRects stores each slot's bounding box in *root* (window) coordinates.
+    // positionInRoot() is used so all slots share the same coordinate space
+    // regardless of nesting depth — required for correct cross-slot hit-testing.
+    val slotRects = remember { Array(totalSlots) { androidx.compose.ui.geometry.Rect.Zero } }
+
+    // rootOffsets stores the root-coordinate origin of each slot Box.
+    // During drag, change.position is relative to the pointerInput's own Box,
+    // so we add the slot's root origin to convert to root coordinates before
+    // checking against slotRects.
+    val rootOffsets = remember { Array(totalSlots) { androidx.compose.ui.geometry.Offset.Zero } }
+
     Column(modifier = modifier.padding(horizontal = 8.dp)) {
         for (r in 0 until rows) {
             Row(
@@ -106,17 +157,87 @@ fun PinnedAppsSection(
                 for (c in 0 until columns) {
                     val index = r * columns + c
                     if (index < pinnedApps.size) {
-                        PinnedAppSlot(
-                            app = pinnedApps[index],
-                            isEditMode = isEditMode,
-                            onAppClick = onAppClick,
-                            onLongClick = { onSlotLongClick(index) },
-                            onRemoveClick = { onRemoveClick(index) }
-                        )
+                        val isDragSource = dragFromIndex == index
+                        val isDragTarget = dragOverIndex == index && dragFromIndex != index
+
+                        Box(
+                            modifier = Modifier
+                                .width(64.dp)
+                                // Record this slot's bounding rect in root coordinates.
+                                // positionInRoot() ensures all slots share one coordinate
+                                // space so the hit-test in onDrag works cross-slot.
+                                .onGloballyPositioned { coords ->
+                                    val pos = coords.positionInRoot()
+                                    rootOffsets[index] = androidx.compose.ui.geometry.Offset(pos.x, pos.y)
+                                    slotRects[index] = androidx.compose.ui.geometry.Rect(
+                                        left   = pos.x,
+                                        top    = pos.y,
+                                        right  = pos.x + coords.size.width,
+                                        bottom = pos.y + coords.size.height
+                                    )
+                                }
+                                // Drag gesture: long-press starts the drag; move updates
+                                // dragOverIndex by hit-testing slotRects; release triggers swap.
+                                .pointerInput(pinnedApps) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = { _ ->
+                                            // Only start a drag from a filled slot
+                                            if (pinnedApps.getOrNull(index) != null) {
+                                                dragFromIndex = index
+                                                dragOverIndex = index
+                                                onDragStarted() // suspend DrawingOverlay interception
+                                            }
+                                        },
+                                        onDrag = { change, _ ->
+                                            if (dragFromIndex == -1) return@detectDragGesturesAfterLongPress
+                                            // change.position is local to this slot's Box.
+                                            // Convert to root coordinates by adding the slot's root origin.
+                                            val origin = rootOffsets[index]
+                                            val rootPos = androidx.compose.ui.geometry.Offset(
+                                                x = origin.x + change.position.x,
+                                                y = origin.y + change.position.y
+                                            )
+                                            val hit = slotRects.indexOfFirst { rect ->
+                                                rect != androidx.compose.ui.geometry.Rect.Zero &&
+                                                rootPos.x in rect.left..rect.right &&
+                                                rootPos.y in rect.top..rect.bottom
+                                            }
+                                            dragOverIndex = hit // -1 if finger is outside all slots
+                                        },
+                                        onDragEnd = {
+                                            // Only swap if released over a different valid slot
+                                            if (dragFromIndex != -1 &&
+                                                dragOverIndex != -1 &&
+                                                dragOverIndex != dragFromIndex
+                                            ) {
+                                                onSwapSlots(dragFromIndex, dragOverIndex)
+                                            }
+                                            dragFromIndex = -1
+                                            dragOverIndex = -1
+                                            onDragEnded() // resume DrawingOverlay interception
+                                        },
+                                        onDragCancel = {
+                                            dragFromIndex = -1
+                                            dragOverIndex = -1
+                                            onDragEnded() // resume DrawingOverlay interception
+                                        }
+                                    )
+                                }
+                        ) {
+                            PinnedAppSlot(
+                                app = pinnedApps[index],
+                                isEditMode = isEditMode,
+                                isDragSource = isDragSource,
+                                isDragTarget = isDragTarget,
+                                onAppClick = onAppClick,
+                                onLongClick = { onSlotLongClick(index) },
+                                onRemoveClick = { onRemoveClick(index) }
+                            )
+                        }
                     }
                 }
             }
-            if (r == 0) Spacer(modifier = Modifier.height(8.dp))
+            if (r < rows - 1) Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }
@@ -126,14 +247,33 @@ fun PinnedAppsSection(
 fun PinnedAppSlot(
     app: AppInfo?,
     isEditMode: Boolean = false,
+    // Drag-to-reorder visual state:
+    // isDragSource — this slot is being dragged; dims icon to signal it's in motion
+    // isDragTarget — finger is currently hovering over this slot; shows drop ring
+    isDragSource: Boolean = false,
+    isDragTarget: Boolean = false,
     onAppClick: (String) -> Unit,
     onLongClick: () -> Unit,
     onRemoveClick: () -> Unit
 ) {
+    // Opacity: dim the source slot during drag so the user sees it as "picked up"
+    val contentAlpha = if (isDragSource) 0.35f else 1f
+
     Box(
         modifier = Modifier.width(64.dp),
         contentAlignment = Alignment.TopEnd
     ) {
+        // Drop-target highlight ring: drawn behind the slot content so it doesn't
+        // clip the icon. Only visible while isDragTarget is true.
+        if (isDragTarget) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .align(Alignment.Center)
+                    .background(Color.White.copy(alpha = 0.15f), CircleShape)
+            )
+        }
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -148,7 +288,9 @@ fun PinnedAppSlot(
                 Image(
                     bitmap = app.icon.toBitmap(96, 96).asImageBitmap(),
                     contentDescription = app.label,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier
+                        .size(48.dp)
+                        .graphicsLayer { alpha = contentAlpha }
                 )
             } else {
                 Box(
@@ -161,7 +303,7 @@ fun PinnedAppSlot(
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = app?.label ?: "",
-                color = Color.White.copy(alpha = 0.7f),
+                color = Color.White.copy(alpha = 0.7f * contentAlpha),
                 fontSize = 9.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

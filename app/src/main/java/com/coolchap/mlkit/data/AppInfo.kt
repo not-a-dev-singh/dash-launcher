@@ -1,4 +1,4 @@
-package io.github.not-a-dev-singh.data
+package io.github.dashLauncher.data
 
 import android.graphics.drawable.Drawable
 

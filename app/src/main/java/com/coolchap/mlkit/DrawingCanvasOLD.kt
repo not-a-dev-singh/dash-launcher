@@ -1,5 +1,5 @@
 /*
-package io.github.not-a-dev-singh.ui
+package io.github.dashLauncher.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.*
@@ -10,8 +10,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.LocalContext
-import io.github.not-a-dev-singh.gesture.GestureHandler
-import io.github.not-a-dev-singh.recognition.InkRecognitionManager
+import io.github.dashLauncher.gesture.GestureHandler
+import io.github.dashLauncher.recognition.InkRecognitionManager
 import com.google.mlkit.vision.digitalink.recognition.Ink
 
 data class DrawPoint(val x: Float, val y: Float, val isStart: Boolean)
