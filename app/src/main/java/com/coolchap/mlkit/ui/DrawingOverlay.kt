@@ -75,31 +75,24 @@ fun DrawingOverlay(
     // so a new lambda reference from the parent is never stale inside GestureHandler
     SideEffect {
         gestureHandler.onSwipeUp = onSwipeUp
-
-        // ---------------------------------------------------------------------
-        // BACKSPACE GESTURE — orchestration layer
-        // Responsibility: clean up all in-flight UI and ink state BEFORE the
-        // ViewModel is told to drop a character. Order matters:
-        //   1. Cancel pending recognize/idle timers — prevent a stale recognition
-        //      result from arriving after the character has already been removed.
-        //   2. Clear pendingInk — drop any buffered ink that hasn't been sent yet.
-        //   3. Clear canvas draw-points — erase the visible stroke trail.
-        //   4. gestureHandler.reset() — wipe inkBuilder so the next scribble does
-        //      not append to strokes from before the backspace.
-        //   5. onBackspace() — notify ViewModel to drop the last character.
-        // WARNING: do NOT reorder these steps or skip the reset() call.
-        // Skipping reset() is what caused "consecutive backspaces always fail":
-        // the old ink accumulated and ML Kit returned the old word again.
-        // ---------------------------------------------------------------------
+        // Wrap onBackspace: inkBuilder still holds all strokes from the active session.
+        // Without resetting it, the next scribble after a backspace would append to
+        // stale ink and ML Kit would try to recognise old-text + new-stroke, causing
+        // recognition to regress after every consecutive backspace.        
         gestureHandler.onBackspace = {
             idleHandler.removeCallbacks(recognizeRunnable)
+            //   1. Cancel pending recognize/idle timers — prevent a stale recognition
+            //      result from arriving after the character has already been removed.
             idleHandler.removeCallbacks(idleRunnable)
+            //   2. Clear pendingInk — drop any buffered ink that hasn't been sent yet.
             pendingInk[0] = null
+            //   3. Clear canvas draw-points — erase the visible stroke trail.
             points.clear()
-            gestureHandler.reset()  // clears inkBuilder — MUST come before onBackspace()
-            onBackspace()           // notifies LauncherViewModel — see backspace() there
+            // WARNING: do NOT reorder these steps or skip the reset() call.
+            // Skipping reset() is what caused "consecutive backspaces always fail":
+            gestureHandler.reset()  // clears inkBuilder so next scribble starts fresh
+            onBackspace()
         }
-        // ---------------------------------------------------------------------
     }
 
     LaunchedEffect(Unit) {

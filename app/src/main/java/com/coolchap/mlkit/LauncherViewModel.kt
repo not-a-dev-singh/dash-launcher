@@ -19,7 +19,8 @@ data class LauncherState(
     val recognizedText: String = "",
     val showAllApps: Boolean = false,
     val isModelReady: Boolean = false,
-    val isEditMode: Boolean = false
+    val isEditMode: Boolean = false,
+    val draggingApp: AppInfo? = null
 )
 
 class LauncherViewModel(application: Application) : AndroidViewModel(application) {
@@ -45,18 +46,6 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             
             _state.update { it.copy(allApps = all, recentApps = recent, pinnedApps = pinned) }
         }
-    }
-
-    // -------------------------------------------------------------------------
-    // APP INSTALL / UNINSTALL LISTENER — ViewModel entry point
-    // Called by the BroadcastReceiver in MainActivity whenever a package is
-    // added, removed, or replaced. Re-runs the full loadApps() pipeline so that
-    // allApps, recentApps, and pinnedApps are immediately consistent with the
-    // device state. Pinned slots for uninstalled apps become null automatically
-    // because loadApps() re-resolves each package name against the fresh list.
-    // -------------------------------------------------------------------------
-    fun refreshApps() {
-        loadApps()
     }
 
     fun onRecognizedResults(results: List<String>) {
@@ -106,21 +95,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         return filteredApps.take(15)
     }
 
-    // -------------------------------------------------------------------------
-    // BACKSPACE GESTURE — state layer
-    // Responsibility: remove the last character from the visible query and
-    // re-run filtering. Called by DrawingOverlay AFTER ink/timer cleanup.
-    //
-    // Key invariant: always derive the new query from recognizedText (the full
-    // visible string), NOT from committedText alone.
-    // Reason: committedText is only updated after the 1-second idle timer fires.
-    // While the user is still scribbling, committedText may be "" even though
-    // recognizedText shows "map". Using committedText as the base would make the
-    // first backspace wipe the entire string in one gesture.
-    //
-    // WARNING: do NOT change the source of truth back to committedText.
-    // -------------------------------------------------------------------------
     fun backspace() {
+        // Always derive the new query from the full visible text (recognizedText).
+        // The old impl used committedText as the base: when committedText was still
+        // empty (active scribble not yet committed by the idle timer), the else branch
+        // was a no-op and recognizedText was then overwritten with "" — wiping
+        // everything in a single backspace swipe instead of removing one character.
         val current = _state.value.recognizedText
         if (current.isEmpty()) return
         committedText = current.dropLast(1)
@@ -132,7 +112,6 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             )
         }
     }
-    // -------------------------------------------------------------------------
 
     fun commitActiveScribble() {
         committedText = _state.value.recognizedText
@@ -141,6 +120,15 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     fun clearScribble() {
         committedText = ""
         _state.update { it.copy(recognizedText = "", suggestions = emptyList()) }
+    }
+
+    fun refreshApps() {
+        loadApps()
+    }
+
+    fun swapPinnedSlots(fromIndex: Int, toIndex: Int) {
+        repo.swapPinnedSlots(fromIndex, toIndex)
+        loadApps()
     }
 
     fun setShowAllApps(show: Boolean) {
@@ -155,6 +143,10 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         _state.update { it.copy(isEditMode = enabled) }
     }
 
+    fun setDraggingApp(app: AppInfo?) {
+        _state.update { it.copy(draggingApp = app) }
+    }
+
     fun pinApp(packageName: String, slotIndex: Int) {
         repo.pinApp(packageName, slotIndex)
         loadApps()
@@ -162,20 +154,6 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     fun unpinApp(slotIndex: Int) {
         repo.unpinApp(slotIndex)
-        loadApps()
-    }
-
-    // -------------------------------------------------------------------------
-    // DRAG-TO-REORDER: swap two pinned slots.
-    // fromIndex: the slot the user started dragging from.
-    // toIndex:   the slot the user released over.
-    // Delegates to AppRepository.swapPinnedSlots() for persistence, then calls
-    // loadApps() to rebuild pinnedApps state from SharedPreferences so the UI
-    // reflects the new order immediately.
-    // No-op if either index is out of bounds — that guard lives in the repo.
-    // -------------------------------------------------------------------------
-    fun swapPinnedSlots(fromIndex: Int, toIndex: Int) {
-        repo.swapPinnedSlots(fromIndex, toIndex)
         loadApps()
     }
 
