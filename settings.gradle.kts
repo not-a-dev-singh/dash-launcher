@@ -22,6 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "mlkit"
+rootProject.name = "Dash-Launcher"
 include(":app")
  

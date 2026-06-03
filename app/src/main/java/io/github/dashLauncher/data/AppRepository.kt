@@ -1,14 +1,18 @@
-package com.yourapp.launcher.data
+package io.github.dashLauncher.data
 
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import io.github.dashLauncher.data.AppInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class AppRepository(private val context: Context) {
+
+    companion object {
+        private const val PINNED_SLOT_COUNT = 4
+        private const val PINNED_PACKAGES_KEY = "pinned_apps_v2"
+    }
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences("launcher_prefs", Context.MODE_PRIVATE)
@@ -48,13 +52,17 @@ class AppRepository(private val context: Context) {
     }
 
     fun getPinnedPackages(): List<String> {
-        val raw = prefs.getString("pinned_apps_v2", "") ?: ""
-        if (raw.isEmpty()) return List(10) { "" } // Default 10 slots
-        return raw.split(",")
+        val raw = prefs.getString(PINNED_PACKAGES_KEY, "") ?: ""
+        val normalized = normalizePinnedPackages(raw)
+        if (raw != normalized.joinToString(",")) {
+            savePinnedPackages(normalized)
+        }
+        return normalized
     }
 
     fun savePinnedPackages(packages: List<String>) {
-        prefs.edit().putString("pinned_apps_v2", packages.joinToString(",")).apply()
+        val normalized = normalizePinnedPackages(packages)
+        prefs.edit().putString(PINNED_PACKAGES_KEY, normalized.joinToString(",")).apply()
     }
     
     fun pinApp(packageName: String, index: Int) {
@@ -92,4 +100,19 @@ class AppRepository(private val context: Context) {
         current[toIndex] = temp
         savePinnedPackages(current)
     }
+
+    private fun normalizePinnedPackages(raw: String): List<String> {
+        if (raw.isEmpty()) return emptyPinnedSlots()
+        return normalizePinnedPackages(raw.split(",", limit = PINNED_SLOT_COUNT + 1))
+    }
+
+    private fun normalizePinnedPackages(packages: List<String>): List<String> {
+        return packages
+            .take(PINNED_SLOT_COUNT)
+            .let { slots ->
+                slots + List((PINNED_SLOT_COUNT - slots.size).coerceAtLeast(0)) { "" }
+            }
+    }
+
+    private fun emptyPinnedSlots(): List<String> = List(PINNED_SLOT_COUNT) { "" }
 }

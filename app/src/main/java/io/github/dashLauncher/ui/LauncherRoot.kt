@@ -8,7 +8,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.dashLauncher.LauncherState
 import io.github.dashLauncher.data.AppInfo
 import io.github.dashLauncher.recognition.InkRecognitionManager
@@ -73,6 +75,8 @@ fun LauncherRoot(
                                 onSetEditMode(false)
                             }
                         )
+                    } else if (!state.modelDownloadStatus.isReady) {
+                        ModelDownloadBanner(status = state.modelDownloadStatus)
                     }
                 }
 
@@ -188,6 +192,48 @@ fun LauncherRoot(
                     if (index != -1) onUnpinApp(index)
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun ModelDownloadBanner(status: io.github.dashLauncher.ModelDownloadStatus) {
+    val subtitle = when {
+        status.errorText != null -> status.errorText
+        !status.etaText.isNullOrEmpty() -> status.etaText
+        else -> "Waiting for model readiness"
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        color = Color.White.copy(alpha = 0.12f),
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            Text(
+                text = status.message.ifEmpty { "Preparing handwriting model" },
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                color = Color.White.copy(alpha = 0.65f),
+                fontSize = 11.sp
+            )
+            if (status.isDownloading) {
+                Spacer(modifier = Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color.White,
+                    trackColor = Color.White.copy(alpha = 0.18f)
+                )
+            }
         }
     }
 }

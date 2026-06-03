@@ -15,7 +15,7 @@ A minimal Android home-screen launcher whose primary interaction model is **free
 - Splits the result into three lists held in `LauncherState`:
   - `allApps` — complete sorted list.
   - `recentApps` — top 20 non-pinned apps.
-  - `pinnedApps` — 10 fixed slots; empty slots are `null`.
+  - `pinnedApps` — 4 fixed slots; empty slots are `null`.
 - **Usage-access permission:** `MainActivity` checks `AppOpsManager` on start; if missing, sends the user to the system Usage Access settings screen.
 
 ---
@@ -35,7 +35,7 @@ The home screen has three vertical zones, all anchored to the bottom of the scre
 │  (recent or suggestions) │
 │                          │
 ├──────────────────────────┤
-│  Pinned Apps (2×5 grid)  │  ← always visible
+│  Pinned Apps (1×4 row)   │  ← always visible
 │                          │
 └──────────────────────────┘
 ```
@@ -151,15 +151,14 @@ Every touch sequence is classified once, at the first moment movement exceeds 30
 
 **Source:** `AppGrid.PinnedAppsSection`, `AppGrid.PinnedAppSlot`
 
-- Fixed 1-row × 4-column grid (4 slots) at the bottom of the home screen.
+- Fixed 1-row × 4-column section at the bottom of the home screen.
 - Each slot shows a 48 dp icon and a 9 sp truncated label. Empty slots render as a faint circle placeholder.
 - **Tap (normal mode)** → launch app.
 - **Long-press** → enter edit mode (shows remove badges on all occupied slots).
 - **Tap slot (while `appToPin` is set)** → pin the pending app into that slot (removes it from its previous slot if it was already pinned elsewhere).
 - **Long-press slot (while `appToPin` is set)** → same as tap-slot: pins the pending app.
 - **× badge (edit mode)** → unpin the app from that slot (slot becomes empty).
-- **Drag-to-reorder** → long-press a filled slot and drag to another slot to swap them; see §13.
-- Persistence: slot assignments are stored as a comma-separated string in `SharedPreferences` under key `pinned_apps_v2` (4 slots, empty string for empty slots).
+- Persistence: slot assignments are stored as a comma-separated string in `SharedPreferences` under key `pinned_apps_v2` (4 comma-separated package names, empty string for empty slots). Older saved values with more than 4 slots are trimmed to the visible slots when read.
 
 ---
 
@@ -174,26 +173,18 @@ Every touch sequence is classified once, at the first moment movement exceeds 30
 - **Back button** (top-right) → dismiss.
 - **Tap app** → launch and dismiss All Apps.
 - **Long-press app** → sets `appToPin`, dismisses All Apps, returns to home screen in pin-selection mode.
-- **Pin button** → dismisses All Apps and enters pin-selection mode on the home screen (user taps a slot).
-- **Unpin button** → immediately removes the app from its pinned slot; slot index is resolved in `LauncherRoot` by matching the package name against `state.pinnedApps`, then `onUnpinApp(index)` is called.
+- Pin/Unpin inline button: does not require entering edit mode; toggles pinned state directly (unpin removes from slot; pin requires selecting a slot on the home screen after dismissal — this flow is currently incomplete: the unpin here calls a package-based `onUnpinApp(String)` callback that has no implementation in `LauncherRoot`/`ViewModel`).
 
 ---
 
 ## 10. Backspace
 
-**Source:** `LauncherViewModel.backspace()`, `DrawingOverlay.kt` (orchestration), `GestureHandler.kt` (detection)
+**Source:** `LauncherViewModel.backspace()`
 
-The backspace feature spans three layers — each has a strictly defined responsibility:
-
-| Layer | File | Responsibility |
-|---|---|---|
-| Detection | `GestureHandler` | Recognise the right-to-left swipe; invoke `onBackspace` callback |
-| Orchestration | `DrawingOverlay` | Cancel pending timers, clear canvas points, reset `inkBuilder` before notifying ViewModel |
-| State | `LauncherViewModel` | Drop one character from `recognizedText`; re-run filtering |
-
-**Detection rules:** right-to-left swipe with `dx < -(100 × density)` (~100 dp) and horizontal dominance (`absDx > absDy × 2`). The gesture stays undecided while leftward movement is below this threshold — preventing premature misclassification as an ink stroke.
-
-**State invariant:** `backspace()` always derives the new query from `recognizedText` (the full visible string), not `committedText`. `committedText` is only updated after the 1-second idle timer fires; using it as the base would wipe the entire string on the first backspace if the idle timer hasn't fired yet.
+- Triggered by the right-to-left swipe gesture.
+- If `committedText` is non-empty: drops its last character.
+- Else if `recognizedText` is non-empty: clears all text (full reset).
+- Re-runs `filterApps` against the new `committedText` and updates `suggestions` and `recognizedText` in state.
 
 ---
 
@@ -208,41 +199,6 @@ LauncherState
 ├── recognizedText   String              committedText + active recognition candidate
 ├── showAllApps      Boolean             All Apps overlay visibility
 ├── isModelReady     Boolean             ML Kit model downloaded and ready
-└── isEditMode       Boolean             pinned grid shows remove badges
+├── isEditMode       Boolean             pinned grid shows remove badges
+└── draggingApp      AppInfo?            (declared but unused in current UI)
 ```
-
-Note: drag-to-reorder visual state (`dragFromIndex`, `dragOverIndex`) is intentionally kept as local `remember` state inside `PinnedAppsSection` and is not part of `LauncherState`.
-
----
-
-## 12. App Install / Uninstall Listener
-
-**Source:** `MainActivity.kt` (`packageChangeReceiver`), `LauncherViewModel.refreshApps()`
-
-- A `BroadcastReceiver` registered in `MainActivity.onStart` listens for:
-  - `Intent.ACTION_PACKAGE_ADDED` — new app installed
-  - `Intent.ACTION_PACKAGE_REMOVED` — app uninstalled
-  - `Intent.ACTION_PACKAGE_REPLACED` — app updated (icon or label may change)
-- All three call `viewModel.refreshApps()`, which re-runs `loadApps()` to rebuild `allApps`, `recentApps`, and `pinnedApps` from scratch.
-- **Uninstalled pinned apps** resolve to `null` automatically: `loadApps()` re-matches each stored package name against the fresh app list, so removed apps become empty slots without any special-case handling.
-- The receiver is unregistered in `onStop` so it is only active while the launcher is in the foreground.
-- `addDataScheme("package")` is required on the `IntentFilter` — Android will not deliver package-change broadcasts without it.
-
----
-
-## 13. Drag-to-Reorder Pinned Slots
-
-**Source:** `AppGrid.PinnedAppsSection`, `AppRepository.swapPinnedSlots()`, `LauncherViewModel.swapPinnedSlots()`
-
-**Interaction:**
-1. Long-press a filled slot → drag begins; the slot dims to 35% opacity to indicate it is "picked up".
-2. Drag finger over another slot → that slot shows a white highlight ring as the drop target.
-3. Release over a slot → the two slots swap their contents; persistence is updated immediately.
-4. Release outside all slots → drag is cancelled; nothing changes.
-
-**Implementation approach (deliberately simple):**
-- Drag state (`dragFromIndex`, `dragOverIndex`) lives as local `remember` variables in `PinnedAppsSection` — not in `LauncherState`. These are transient visual states that must not survive configuration changes.
-- Hit-testing during drag: each slot records its bounding box via `onGloballyPositioned`; the drag `onDrag` callback checks the current pointer position against those boxes to find the hovered slot. This avoids nested pointer-input scopes.
-- Swap is deferred to `ACTION_UP` only (`onDragEnd`) — no intermediate state mutations during the drag.
-- `AppRepository.swapPinnedSlots(from, to)` does a direct two-element swap in the persisted list. No shift/insert logic — swap semantics keep the implementation minimal.
-- Drag is suppressed while a pin-assignment flow is active (`appToPin != null`) to prevent the two interactions conflicting.

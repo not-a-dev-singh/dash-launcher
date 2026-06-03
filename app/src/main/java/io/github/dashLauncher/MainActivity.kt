@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
 
         inkManager.onModelReady = { viewModel.setModelReady(true) }
         inkManager.onResults = { results -> viewModel.onRecognizedResults(results) }
+        inkManager.onDownloadStatusChanged = { status -> viewModel.setModelDownloadStatus(status) }
         inkManager.initialize("en-US")
 
         if (!hasUsageAccess()) {

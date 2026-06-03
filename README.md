@@ -52,7 +52,8 @@ Search runs in two passes:
 Up to 15 results are shown at any time.
 
 ### Always Focused
-- Uses ML Kit's Digital Ink Recognition (on-device, no internet)
+- Uses ML Kit's Digital Ink Recognition with the English (US) model (`en-US`)
+- The model is downloaded on first launch and then reused on-device
 - No suggestions popup or keyboard interrupt
 - Committed text and active recognition kept separate
 - 1-second idle timer transitions handwritten text to "locked in"
@@ -77,6 +78,8 @@ Then set Dash as your default launcher in system settings.
 
 ### Permissions
 On first launch, you'll be prompted to grant **Usage Access** permission. This allows Dash to see which apps you use most, so they appear at the top of your list.
+
+On the first run, Dash also downloads the **English (US)** handwriting model (`en-US`) from ML Kit. While that happens, the launcher shows a readiness banner with a progress indicator and an estimated time remaining. Once the model is ready, handwriting recognition becomes available automatically.
 
 ## Architecture
 

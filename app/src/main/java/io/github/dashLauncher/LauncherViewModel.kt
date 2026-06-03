@@ -5,7 +5,7 @@ import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.dashLauncher.data.AppInfo
-import com.yourapp.launcher.data.AppRepository
+import io.github.dashLauncher.data.AppRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -19,8 +19,17 @@ data class LauncherState(
     val recognizedText: String = "",
     val showAllApps: Boolean = false,
     val isModelReady: Boolean = false,
+    val modelDownloadStatus: ModelDownloadStatus = ModelDownloadStatus(),
     val isEditMode: Boolean = false,
     val draggingApp: AppInfo? = null
+)
+
+data class ModelDownloadStatus(
+    val isDownloading: Boolean = false,
+    val isReady: Boolean = false,
+    val message: String = "",
+    val etaText: String? = null,
+    val errorText: String? = null
 )
 
 class LauncherViewModel(application: Application) : AndroidViewModel(application) {
@@ -137,6 +146,15 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     fun setModelReady(ready: Boolean) {
         _state.update { it.copy(isModelReady = ready) }
+    }
+
+    fun setModelDownloadStatus(status: ModelDownloadStatus) {
+        _state.update {
+            it.copy(
+                isModelReady = status.isReady,
+                modelDownloadStatus = status
+            )
+        }
     }
 
     fun setEditMode(enabled: Boolean) {
