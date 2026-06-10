@@ -6,8 +6,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.core.content.ContextCompat
 import io.github.dashLauncher.recognition.InkRecognitionManager
 import io.github.dashLauncher.ui.LauncherRoot
+import io.github.dashLauncher.ui.theme.DefaultTheme
 import android.app.AppOpsManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -63,21 +65,23 @@ class MainActivity : ComponentActivity() {
         }
         
         setContent {
-            val state by viewModel.state.collectAsState()
-            LauncherRoot(
-                state = state,
-                inkManager = inkManager,
-                onSwipeUp = { viewModel.setShowAllApps(true) },
-                onBackspace = { viewModel.backspace() },
-                onDismissAllApps = { viewModel.setShowAllApps(false) },
-                onAppClick = { viewModel.launchApp(it) },
-                onClearScribble = { viewModel.clearScribble() },
-                onPinApp = { pkg, index -> viewModel.pinApp(pkg, index) },
-                onUnpinApp = { index -> viewModel.unpinApp(index) },
-                onCommitActiveScribble = { viewModel.commitActiveScribble() },
-                onSetEditMode = { viewModel.setEditMode(it) },
-                onSwapPinnedSlots = { from, to -> viewModel.swapPinnedSlots(from, to) }
-            )
+            DefaultTheme(darkTheme = true, dynamicColor = false) {
+                val state by viewModel.state.collectAsState()
+                LauncherRoot(
+                    state = state,
+                    inkManager = inkManager,
+                    onSwipeUp = { viewModel.setShowAllApps(true) },
+                    onBackspace = { viewModel.backspace() },
+                    onDismissAllApps = { viewModel.setShowAllApps(false) },
+                    onAppClick = { viewModel.launchApp(it) },
+                    onClearScribble = { viewModel.clearScribble() },
+                    onPinApp = { pkg, index -> viewModel.pinApp(pkg, index) },
+                    onUnpinApp = { index -> viewModel.unpinApp(index) },
+                    onCommitActiveScribble = { viewModel.commitActiveScribble() },
+                    onSetEditMode = { viewModel.setEditMode(it) },
+                    onSwapPinnedSlots = { from, to -> viewModel.swapPinnedSlots(from, to) }
+                )
+            }
         }
     }
 
@@ -91,7 +95,19 @@ class MainActivity : ComponentActivity() {
             addAction(Intent.ACTION_PACKAGE_REPLACED)
             addDataScheme("package")
         }
-        registerReceiver(packageChangeReceiver, filter)
+        ContextCompat.registerReceiver(
+            this,
+            packageChangeReceiver,
+            filter,
+            ContextCompat.RECEIVER_EXPORTED
+        )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Catch any install/uninstall changes that happened while the launcher
+        // was backgrounded or if the package broadcast was missed by the system.
+        viewModel.refreshApps()
     }
 
     override fun onStop() {

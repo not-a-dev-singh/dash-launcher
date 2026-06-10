@@ -2,6 +2,9 @@ package io.github.dashLauncher.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
+val AmoledBlack = Color(0xFF000000)
+val SurfaceBlack = Color(0xFF000000)
+
 val Purple80 = Color(0xFFD0BCFF)
 val PurpleGrey80 = Color(0xFFCCC2DC)
 val Pink80 = Color(0xFFEFB8C8)
