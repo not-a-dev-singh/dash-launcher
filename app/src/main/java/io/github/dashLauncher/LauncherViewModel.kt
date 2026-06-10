@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.dashLauncher.data.AppInfo
 import io.github.dashLauncher.data.AppRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -39,27 +40,87 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     val state: StateFlow<LauncherState> = _state
 
     private var committedText: String = ""
+    private var loadAppsJob: Job? = null
 
     init {
         loadApps()
     }
 
     private fun loadApps() {
-        viewModelScope.launch {
-            val all = repo.getAllApps()
-            val pinnedPkgs = repo.getPinnedPackages()
-            val pinned = pinnedPkgs.map { pkg -> 
-                if (pkg.isEmpty()) null else all.find { it.packageName == pkg } 
-            }
-            val recent = all.filter { app -> !pinnedPkgs.contains(app.packageName) }.take(20)
-            
-            _state.update { it.copy(allApps = all, recentApps = recent, pinnedApps = pinned) }
+        loadAppsJob?.cancel()
+        loadAppsJob = viewModelScope.launch {
+            applyAppSections(buildAppSections())
+        }
+    }
+
+    private suspend fun buildAppSections(): AppSections {
+        // TODO: move this snapshot-building logic into a dedicated helper or
+        // use-case class if refresh logic grows further.
+        // TODO: if app-state derivation expands, split persistence cleanup from
+        // UI section building so each step stays easy to scan.
+        val allApps = repo.getAllApps()
+        val installedPackages = allApps.map { it.packageName }.toSet()
+        val rawPinnedPackages = repo.getPinnedPackages()
+        val pinnedPackages = sanitizePinnedPackages(rawPinnedPackages, installedPackages)
+        if (pinnedPackages != rawPinnedPackages) {
+            repo.savePinnedPackages(pinnedPackages)
+        }
+
+        val currentQuery = _state.value.recognizedText.trim()
+
+        return AppSections(
+            allApps = allApps,
+            pinnedApps = buildPinnedApps(allApps, pinnedPackages),
+            recentApps = buildRecentApps(allApps, pinnedPackages),
+            suggestions = buildSuggestions(currentQuery, allApps)
+        )
+    }
+
+    private fun applyAppSections(sections: AppSections) {
+        _state.update {
+            it.copy(
+                allApps = sections.allApps,
+                recentApps = sections.recentApps,
+                pinnedApps = sections.pinnedApps,
+                suggestions = sections.suggestions
+            )
+        }
+    }
+
+    private fun buildPinnedApps(
+        allApps: List<AppInfo>,
+        pinnedPackages: List<String>
+    ): List<AppInfo?> {
+        return pinnedPackages.map { pkg ->
+            if (pkg.isEmpty()) null else allApps.find { it.packageName == pkg }
+        }
+    }
+
+    private fun buildRecentApps(
+        allApps: List<AppInfo>,
+        pinnedPackages: List<String>
+    ): List<AppInfo> {
+        return allApps.filter { app -> !pinnedPackages.contains(app.packageName) }.take(20)
+    }
+
+    private fun buildSuggestions(query: String, allApps: List<AppInfo>): List<AppInfo> {
+        return if (query.isNotEmpty()) filterApps(query, allApps) else emptyList()
+    }
+
+    private fun sanitizePinnedPackages(
+        pinnedPackages: List<String>,
+        installedPackages: Set<String>
+    ): List<String> {
+        return pinnedPackages.map { pkg ->
+            if (pkg.isNotEmpty() && pkg in installedPackages) pkg else ""
         }
     }
 
     fun onRecognizedResults(results: List<String>) {
         if (results.isEmpty()) return
 
+        // TODO: if recognition behavior grows, split state update and
+        // auto-launch decision into separate helpers for clarity.
         val activeResult = results.first().trim()
         val totalQuery = (committedText + activeResult).trim()
 
@@ -82,20 +143,21 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun filterApps(query: String): List<AppInfo> {
+    private fun filterApps(query: String, sourceApps: List<AppInfo> = _state.value.allApps): List<AppInfo> {
         if (query.isEmpty()) return emptyList()
         
-        val allApps = _state.value.allApps
+        // TODO: move matching/ranking logic into a dedicated search helper if
+        // we add more scoring rules, fuzzy match, or recency weighting.
         val filteredApps = mutableListOf<AppInfo>()
         val seenPackages = mutableSetOf<String>()
 
-        val prefixMatches = allApps.filter {
+        val prefixMatches = sourceApps.filter {
             it.label.startsWith(query, ignoreCase = true) && !seenPackages.contains(it.packageName)
         }
         filteredApps.addAll(prefixMatches)
         seenPackages.addAll(prefixMatches.map { it.packageName })
 
-        val containsMatches = allApps.filter {
+        val containsMatches = sourceApps.filter {
             it.label.contains(query, ignoreCase = true) && !seenPackages.contains(it.packageName)
         }
         filteredApps.addAll(containsMatches)
@@ -132,6 +194,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun refreshApps() {
+        // TODO: if more refresh triggers appear, route them through a single
+        // mutation/reload helper to reduce repeated load calls.
         loadApps()
     }
 
@@ -166,6 +230,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun pinApp(packageName: String, slotIndex: Int) {
+        // TODO: consider a small "mutate then reload" helper if more actions
+        // start needing the same repo-write + refresh pattern.
         repo.pinApp(packageName, slotIndex)
         loadApps()
     }
@@ -182,4 +248,11 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             ?.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
         intent?.let { getApplication<Application>().startActivity(it) }
     }
+
+    private data class AppSections(
+        val allApps: List<AppInfo>,
+        val pinnedApps: List<AppInfo?>,
+        val recentApps: List<AppInfo>,
+        val suggestions: List<AppInfo>
+    )
 }

@@ -2,10 +2,15 @@ package io.github.dashLauncher.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -19,6 +24,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
 
+private val AllAppsHorizontalInset = 12.dp
+
 @Composable
 fun AllAppsScreen(
     apps: List<AppInfo>,
@@ -26,7 +33,8 @@ fun AllAppsScreen(
     onDismiss: () -> Unit,
     onPinApp: (String) -> Unit,
     onUnpinApp: (String) -> Unit,
-    pinnedPackages: List<String>
+    pinnedPackages: List<String>,
+    onSettingsClick: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
@@ -37,22 +45,38 @@ fun AllAppsScreen(
                     if (dragAmount > 30) onDismiss() // swipe down to dismiss
                 }
             }
-            .padding(horizontal = 16.dp)  // vertical padding replaced by the 56dp header zone
+            .padding(horizontal = AllAppsHorizontalInset)  // vertical padding replaced by the 56dp header zone
     ) {
         // Fixed-height top bar zone — same 56dp as home screen so both screens share
         // the same visual rhythm; "All Apps" title sits here, leaving room for
         // a future back button or settings icon in the same row.
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
-            contentAlignment = Alignment.CenterStart
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = "All Apps",
                 color = Color.White.copy(alpha = 0.5f),
-                fontSize = 12.sp
+                fontSize = 12.sp,
+                modifier = Modifier.weight(1f)
             )
+            if (onSettingsClick != null) {
+                val interactionSource = remember { MutableInteractionSource() }
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Settings",
+                    tint = Color.White.copy(alpha = 0.5f),
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null
+                        ) { onSettingsClick() }
+                        .padding(6.dp)
+                )
+            }
         }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {

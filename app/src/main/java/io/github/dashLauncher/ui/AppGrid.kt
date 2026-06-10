@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -142,13 +143,52 @@ fun PinnedAppsSection(
     // regardless of nesting depth — required for correct cross-slot hit-testing.
     val slotRects = remember { Array(totalSlots) { androidx.compose.ui.geometry.Rect.Zero } }
 
-    // rootOffsets stores the root-coordinate origin of each slot Box.
-    // During drag, change.position is relative to the pointerInput's own Box,
-    // so we add the slot's root origin to convert to root coordinates before
-    // checking against slotRects.
-    val rootOffsets = remember { Array(totalSlots) { androidx.compose.ui.geometry.Offset.Zero } }
-
-    Column(modifier = modifier.padding(horizontal = 8.dp)) {
+    Column(
+        modifier = modifier
+            .padding(horizontal = 8.dp)
+            .pointerInput(pinnedApps) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { start ->
+                        val hitIndex = slotRects.indexOfFirst { rect ->
+                            rect != androidx.compose.ui.geometry.Rect.Zero &&
+                                start.x in rect.left..rect.right &&
+                                start.y in rect.top..rect.bottom
+                        }
+                        if (hitIndex != -1 && pinnedApps.getOrNull(hitIndex) != null) {
+                            dragFromIndex = hitIndex
+                            dragOverIndex = hitIndex
+                            onDragStarted()
+                        }
+                    },
+                    onDrag = { change, _ ->
+                        if (dragFromIndex == -1) return@detectDragGesturesAfterLongPress
+                        val rootPos = change.position
+                        val hit = slotRects.indexOfFirst { rect ->
+                            rect != androidx.compose.ui.geometry.Rect.Zero &&
+                                rootPos.x in rect.left..rect.right &&
+                                rootPos.y in rect.top..rect.bottom
+                        }
+                        dragOverIndex = hit
+                    },
+                    onDragEnd = {
+                        if (dragFromIndex != -1 &&
+                            dragOverIndex != -1 &&
+                            dragOverIndex != dragFromIndex
+                        ) {
+                            onSwapSlots(dragFromIndex, dragOverIndex)
+                        }
+                        dragFromIndex = -1
+                        dragOverIndex = -1
+                        onDragEnded()
+                    },
+                    onDragCancel = {
+                        dragFromIndex = -1
+                        dragOverIndex = -1
+                        onDragEnded()
+                    }
+                )
+            }
+    ) {
         for (r in 0 until rows) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -164,63 +204,15 @@ fun PinnedAppsSection(
                             modifier = Modifier
                                 .width(64.dp)
                                 // Record this slot's bounding rect in root coordinates.
-                                // positionInRoot() ensures all slots share one coordinate
-                                // space so the hit-test in onDrag works cross-slot.
+                                // positionInParent() matches the coordinate space used
+                                // by the parent pointerInput detector.
                                 .onGloballyPositioned { coords ->
-                                    val pos = coords.positionInRoot()
-                                    rootOffsets[index] = androidx.compose.ui.geometry.Offset(pos.x, pos.y)
+                                    val pos = coords.positionInParent()
                                     slotRects[index] = androidx.compose.ui.geometry.Rect(
-                                        left   = pos.x,
-                                        top    = pos.y,
-                                        right  = pos.x + coords.size.width,
+                                        left = pos.x,
+                                        top = pos.y,
+                                        right = pos.x + coords.size.width,
                                         bottom = pos.y + coords.size.height
-                                    )
-                                }
-                                // Drag gesture: long-press starts the drag; move updates
-                                // dragOverIndex by hit-testing slotRects; release triggers swap.
-                                .pointerInput(pinnedApps) {
-                                    detectDragGesturesAfterLongPress(
-                                        onDragStart = { _ ->
-                                            // Only start a drag from a filled slot
-                                            if (pinnedApps.getOrNull(index) != null) {
-                                                dragFromIndex = index
-                                                dragOverIndex = index
-                                                onDragStarted() // suspend DrawingOverlay interception
-                                            }
-                                        },
-                                        onDrag = { change, _ ->
-                                            if (dragFromIndex == -1) return@detectDragGesturesAfterLongPress
-                                            // change.position is local to this slot's Box.
-                                            // Convert to root coordinates by adding the slot's root origin.
-                                            val origin = rootOffsets[index]
-                                            val rootPos = androidx.compose.ui.geometry.Offset(
-                                                x = origin.x + change.position.x,
-                                                y = origin.y + change.position.y
-                                            )
-                                            val hit = slotRects.indexOfFirst { rect ->
-                                                rect != androidx.compose.ui.geometry.Rect.Zero &&
-                                                rootPos.x in rect.left..rect.right &&
-                                                rootPos.y in rect.top..rect.bottom
-                                            }
-                                            dragOverIndex = hit // -1 if finger is outside all slots
-                                        },
-                                        onDragEnd = {
-                                            // Only swap if released over a different valid slot
-                                            if (dragFromIndex != -1 &&
-                                                dragOverIndex != -1 &&
-                                                dragOverIndex != dragFromIndex
-                                            ) {
-                                                onSwapSlots(dragFromIndex, dragOverIndex)
-                                            }
-                                            dragFromIndex = -1
-                                            dragOverIndex = -1
-                                            onDragEnded() // resume DrawingOverlay interception
-                                        },
-                                        onDragCancel = {
-                                            dragFromIndex = -1
-                                            dragOverIndex = -1
-                                            onDragEnded() // resume DrawingOverlay interception
-                                        }
                                     )
                                 }
                         ) {

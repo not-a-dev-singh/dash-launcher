@@ -14,7 +14,12 @@ import androidx.compose.ui.platform.LocalContext
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
     secondary = PurpleGrey80,
-    tertiary = Pink80
+    tertiary = Pink80,
+    background = AmoledBlack,
+    surface = SurfaceBlack,
+    surfaceVariant = AmoledBlack,
+    onBackground = androidx.compose.ui.graphics.Color.White,
+    onSurface = androidx.compose.ui.graphics.Color.White
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -34,12 +39,15 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun MlkitTheme(
+fun DefaultTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
+    // TODO: add optional wallpaper and user-selected palette support later.
+    // Keep the theme entry point centralized so those options can be layered in
+    // without touching the launcher screen structure.
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
