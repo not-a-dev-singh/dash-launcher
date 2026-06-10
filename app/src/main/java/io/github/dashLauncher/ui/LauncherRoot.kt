@@ -36,6 +36,7 @@ fun LauncherRoot(
     // Drag-to-reorder callback: called with (fromIndex, toIndex) when the user
     // drops a pinned slot onto another. Routes to LauncherViewModel.swapPinnedSlots().
     onSwapPinnedSlots: (Int, Int) -> Unit,
+    onSettingsClick: (() -> Unit)? = null,
     topBarContent: (@Composable BoxScope.() -> Unit)? = null
 ) {
     var appToPin by remember { mutableStateOf<AppInfo?>(null) }
@@ -71,7 +72,7 @@ fun LauncherRoot(
                         appToPin = null
                         onSetEditMode(false)
                     },
-                    modifier = Modifier.padding(horizontal = LauncherHorizontalInset, top = 4.dp),
+                    modifier = Modifier.padding(start = LauncherHorizontalInset, end = LauncherHorizontalInset, top = 4.dp),
                     extraContent = topBarContent
                 )
 
@@ -199,7 +200,8 @@ fun LauncherRoot(
                     // resolve slot index here so AllAppsScreen stays package-agnostic
                     val index = state.pinnedApps.indexOfFirst { it?.packageName == pkg }
                     if (index != -1) onUnpinApp(index)
-                }
+                },
+                onSettingsClick = onSettingsClick
             )
         }
     }

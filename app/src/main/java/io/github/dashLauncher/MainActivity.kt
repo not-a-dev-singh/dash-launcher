@@ -4,8 +4,24 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import io.github.dashLauncher.recognition.InkRecognitionManager
 import io.github.dashLauncher.ui.LauncherRoot
@@ -16,11 +32,15 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.provider.Settings
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
 
     private val viewModel: LauncherViewModel by viewModels()
     private val inkManager = InkRecognitionManager()
+    private val prefs by lazy { getSharedPreferences("launcher_prefs", MODE_PRIVATE) }
 
     // -------------------------------------------------------------------------
     // APP INSTALL / UNINSTALL LISTENER
@@ -60,27 +80,51 @@ class MainActivity : ComponentActivity() {
         inkManager.onDownloadStatusChanged = { status -> viewModel.setModelDownloadStatus(status) }
         inkManager.initialize("en-US")
 
-        if (!hasUsageAccess()) {
-            requestUsageAccess()
-        }
-        
         setContent {
             DefaultTheme(darkTheme = true, dynamicColor = false) {
                 val state by viewModel.state.collectAsState()
-                LauncherRoot(
-                    state = state,
-                    inkManager = inkManager,
-                    onSwipeUp = { viewModel.setShowAllApps(true) },
-                    onBackspace = { viewModel.backspace() },
-                    onDismissAllApps = { viewModel.setShowAllApps(false) },
-                    onAppClick = { viewModel.launchApp(it) },
-                    onClearScribble = { viewModel.clearScribble() },
-                    onPinApp = { pkg, index -> viewModel.pinApp(pkg, index) },
-                    onUnpinApp = { index -> viewModel.unpinApp(index) },
-                    onCommitActiveScribble = { viewModel.commitActiveScribble() },
-                    onSetEditMode = { viewModel.setEditMode(it) },
-                    onSwapPinnedSlots = { from, to -> viewModel.swapPinnedSlots(from, to) }
-                )
+                var showUsageIntro by remember {
+                    mutableStateOf(
+                        !hasUsageAccess() && !hasSeenUsageIntro()
+                    )
+                }
+
+                LaunchedEffect(showUsageIntro) {
+                    if (!showUsageIntro && !hasUsageAccess()) {
+                        // If the intro is dismissed, move straight into the launcher
+                        // shell so the user can still see the app even without access.
+                    }
+                }
+
+                if (showUsageIntro) {
+                    UsageAccessIntroScreen(
+                        onContinue = {
+                            markUsageIntroSeen()
+                            requestUsageAccess()
+                            showUsageIntro = false
+                        },
+                        onSkip = {
+                            markUsageIntroSeen()
+                            showUsageIntro = false
+                        }
+                    )
+                } else {
+                    LauncherRoot(
+                        state = state,
+                        inkManager = inkManager,
+                        onSwipeUp = { viewModel.setShowAllApps(true) },
+                        onBackspace = { viewModel.backspace() },
+                        onDismissAllApps = { viewModel.setShowAllApps(false) },
+                        onAppClick = { viewModel.launchApp(it) },
+                        onClearScribble = { viewModel.clearScribble() },
+                        onPinApp = { pkg, index -> viewModel.pinApp(pkg, index) },
+                        onUnpinApp = { index -> viewModel.unpinApp(index) },
+                        onCommitActiveScribble = { viewModel.commitActiveScribble() },
+                        onSetEditMode = { viewModel.setEditMode(it) },
+                        onSwapPinnedSlots = { from, to -> viewModel.swapPinnedSlots(from, to) },
+                        onSettingsClick = { openPhoneSettings() }
+                    )
+                }
             }
         }
     }
@@ -132,5 +176,70 @@ class MainActivity : ComponentActivity() {
 
     private fun requestUsageAccess() {
         startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+    }
+
+    private fun openPhoneSettings() {
+        startActivity(Intent(Settings.ACTION_SETTINGS))
+    }
+
+    private fun hasSeenUsageIntro(): Boolean {
+        return prefs.getBoolean(KEY_USAGE_INTRO_SEEN, false)
+    }
+
+    private fun markUsageIntroSeen() {
+        prefs.edit().putBoolean(KEY_USAGE_INTRO_SEEN, true).apply()
+    }
+
+    companion object {
+        private const val KEY_USAGE_INTRO_SEEN = "usage_intro_seen_v1"
+    }
+}
+
+@Composable
+private fun UsageAccessIntroScreen(
+    onContinue: () -> Unit,
+    onSkip: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text(
+                text = "Welcome to Dash Launcher",
+                style = MaterialTheme.typography.headlineMedium
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "We use Usage Access to sort apps by what you open most, so your launcher stays fast and useful.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "You can continue to grant access now, or skip for now and enter the launcher shell.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(
+                onClick = onContinue,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Continue to permission")
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = onSkip,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Skip for now")
+            }
+        }
     }
 }

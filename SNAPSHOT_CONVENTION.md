@@ -91,6 +91,8 @@ change is explicitly requested.
 ### `MainActivity`
 
 - Registers a package-change receiver in `onStart` and unregisters it in `onStop`.
+- On first launch without Usage Access, shows an in-app intro screen before
+  sending the user to system settings.
 - Also refreshes app state in `onResume` so missed install/uninstall changes are
   caught when the launcher becomes active again.
 - Refreshes the app list when apps are added, removed, or replaced.
