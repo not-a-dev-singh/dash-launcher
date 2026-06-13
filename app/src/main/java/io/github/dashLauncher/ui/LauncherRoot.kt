@@ -12,13 +12,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.*
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.blur
 import io.github.dashLauncher.LauncherState
 import io.github.dashLauncher.data.AppInfo
 import io.github.dashLauncher.recognition.InkRecognitionManager
 
-private val LauncherHorizontalInset = 12.dp
+private val LauncherHorizontalInset = 24.dp
 
 @Composable
 fun LauncherRoot(
@@ -61,7 +68,9 @@ fun LauncherRoot(
             isInputSuspended = { isPinDragActive }
         ) {
             Column(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(if (state.showAllApps) 16.dp else 0.dp),
                 verticalArrangement = Arrangement.Bottom
             ) {
                 LauncherTopBar(
@@ -74,6 +83,12 @@ fun LauncherRoot(
                     },
                     modifier = Modifier.padding(start = LauncherHorizontalInset, end = LauncherHorizontalInset, top = 4.dp),
                     extraContent = topBarContent
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = LauncherHorizontalInset, vertical = 8.dp),
+                    color = Color.White.copy(alpha = 0.10f),
+                    thickness = 1.dp
                 )
 
                 // Main App List (Suggestions or Recent)
@@ -108,14 +123,16 @@ fun LauncherRoot(
                         Surface(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .padding(16.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
+                                .padding(16.dp)
+                                .border(1.dp, Color.White.copy(alpha = 0.12f), MaterialTheme.shapes.medium),
+                            color = Color.Black.copy(alpha = 0.75f),
                             shape = MaterialTheme.shapes.medium
                         ) {
                             Text(
                                 "Tap a slot below to pin ${appToPin?.label}",
-                                modifier = Modifier.padding(8.dp),
-                                style = MaterialTheme.typography.bodyMedium
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
                             )
                         }
                     }
@@ -169,7 +186,7 @@ fun LauncherRoot(
 
                     SwipeUpHint(
                         modifier = Modifier
-                            .padding(top = 10.dp, bottom = 10.dp)
+                            .padding(top = 4.dp, bottom = 4.dp)
                     )
                 }
             }
@@ -237,7 +254,7 @@ private fun LauncherTopBar(
                 ModelDownloadBanner(status = modelDownloadStatus)
             }
             else -> {
-                ReservedTopBarHint()
+                DateHeader()
             }
         }
 
@@ -246,40 +263,63 @@ private fun LauncherTopBar(
 }
 
 @Composable
-private fun ReservedTopBarHint() {
+private fun DateHeader() {
+    val currentDate = remember { java.time.LocalDate.now() }
+    val formatter = remember {
+        java.time.format.DateTimeFormatter.ofPattern("EEEE, MMMM d", java.util.Locale.getDefault())
+    }
+    val formattedDate = currentDate.format(formatter)
+
     Box(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.CenterStart
+        .fillMaxSize()
+        .padding(horizontal = 20.dp, vertical = 15.dp),
+        // .border(
+        //     width = 1.dp,
+        //     color = Color.White,
+        //     shape = RoundedCornerShape(0.dp)
+        // ),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .size(width = 72.dp, height = 4.dp)
-                .background(Color.White.copy(alpha = 0.10f), RectangleShape)
-        )
+        Text(
+            text = formattedDate,
+            color = Color.White,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.25.sp,
+            // style = TextStyle(
+                // textDecoration = TextDecoration.Underline
+            )
     }
 }
 
 @Composable
 private fun SwipeUpHint(modifier: Modifier = Modifier) {
-    Column(
+    val infiniteTransition = rememberInfiniteTransition(label = "SwipeUpHintTransition")
+
+    // Animate alpha from 0.2f to 0.6f for a gentle breathing effect
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 0.6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "AlphaAnimation"
+    )
+
+    Box(
         modifier = modifier
-            .width(68.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .fillMaxWidth()
+            .height(16.dp), // Low-profile height to reduce vertical footprint
+        contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = Icons.Filled.KeyboardArrowUp,
-            contentDescription = "Swipe up for all apps",
-            tint = Color.White.copy(alpha = 0.35f),
-            modifier = Modifier.size(16.dp)
-        )
-        Box(
-            modifier = Modifier
-                .width(24.dp)
-                .height(2.dp)
-                .background(Color.White.copy(alpha = 0.16f))
+        Text(
+            text = "S W I P E - U P",
+            color = Color.White.copy(alpha = alpha),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Light,
+            letterSpacing = 6.sp // Wide letter spacing for premium typography
         )
     }
 }
@@ -295,8 +335,9 @@ private fun ModelDownloadBanner(status: io.github.dashLauncher.ModelDownloadStat
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        color = Color.White.copy(alpha = 0.12f),
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .border(1.dp, Color.White.copy(alpha = 0.08f), MaterialTheme.shapes.medium),
+        color = Color.White.copy(alpha = 0.10f),
         shape = MaterialTheme.shapes.medium
     ) {
         Column(

@@ -24,7 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
 
-private val AllAppsHorizontalInset = 12.dp
+private val AllAppsHorizontalInset = 24.dp
 
 @Composable
 fun AllAppsScreen(
@@ -39,7 +39,7 @@ fun AllAppsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.95f))
+            .background(Color.Black.copy(alpha = 0.70f))
             .pointerInput(Unit) {
                 detectVerticalDragGestures { _, dragAmount ->
                     if (dragAmount > 30) onDismiss() // swipe down to dismiss

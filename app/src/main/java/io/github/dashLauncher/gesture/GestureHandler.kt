@@ -5,6 +5,7 @@ import android.view.MotionEvent
 import android.view.VelocityTracker
 import com.google.mlkit.vision.digitalink.recognition.Ink
 import kotlin.math.abs
+import kotlin.math.hypot
 
 class GestureHandler(context: Context) {
 
@@ -15,6 +16,9 @@ class GestureHandler(context: Context) {
     private var velocityTracker: VelocityTracker? = null
     private var startX = 0f
     private var startY = 0f
+    private var lastTrackedX = 0f
+    private var lastTrackedY = 0f
+    private var totalPathLength = 0f
 
     private var inkBuilder = Ink.builder()
     private var strokeBuilder = Ink.Stroke.builder()
@@ -34,6 +38,7 @@ class GestureHandler(context: Context) {
     // and LauncherViewModel (state) respectively — see those files.
     // -------------------------------------------------------------------------
     var onBackspace: (() -> Unit)? = null
+    var onForwardSwipe: (() -> Unit)? = null
 
     fun onTouchEvent(event: MotionEvent): Boolean {
         velocityTracker = velocityTracker ?: VelocityTracker.obtain()
@@ -43,6 +48,9 @@ class GestureHandler(context: Context) {
             MotionEvent.ACTION_DOWN -> {
                 startX = event.x
                 startY = event.y
+                lastTrackedX = event.x
+                lastTrackedY = event.y
+                totalPathLength = 0f
                 isSwipeGesture = false
                 isBackspaceGesture = false
                 gestureDecided = false
@@ -61,26 +69,10 @@ class GestureHandler(context: Context) {
                     val absDy = abs(dy)
                     val startedInSwipeZone = startY > screenHeight - swipeZoneHeight
 
-                    // --- BACKSPACE DETECTION: gesture classification rules ---
-                    // Each branch locks gestureDecided only when the gesture is
-                    // unambiguous. The backspace branch intentionally waits for the
-                    // full density-scaled distance so a slow leftward scribble stroke
-                    // is never prematurely classified as ink before the threshold is
-                    // reached. Do NOT lower the backspace threshold or merge these
-                    // branches — that is what caused the original "registers as dot" bug.
                     when {
                         // Swipe-up: lock in as soon as upward movement is dominant
                         startedInSwipeZone && dy > 0 && absDy > 30 && absDy > absDx * 1.5f -> {
                             isSwipeGesture = true
-                            gestureDecided = true
-                        }
-                        // Backspace: RIGHT-TO-LEFT swipe.
-                        // Threshold: ~100 dp (density-scaled). Must be horizontally dominant
-                        // (absDx > absDy * 2) to avoid treating diagonal strokes as backspace.
-                        // WARNING: do not reduce this threshold or remove the horizontal-dominance
-                        // check — doing so re-introduces misclassification of ink strokes.
-                        dx < -(100 * density) && absDx > absDy * 2f -> {
-                            isBackspaceGesture = true
                             gestureDecided = true
                         }
                         // Ink: moved enough AND direction rules out a left swipe
@@ -90,13 +82,17 @@ class GestureHandler(context: Context) {
                         // Still ambiguous: leftward but below backspace threshold.
                         // Keep accumulating points without locking gestureDecided.
                     }
-                    // --- END BACKSPACE DETECTION ---
                 }
 
                 // Accumulate stroke points whether the gesture is decided-as-ink or still
                 // ambiguous. If ACTION_UP reveals this was a backspace/swipe, the stroke
                 // is discarded there and gestureHandler.reset() cleans up strokeBuilder.
                 if (!isSwipeGesture && !isBackspaceGesture) {
+                    val dist = hypot(event.x - lastTrackedX, event.y - lastTrackedY)
+                    totalPathLength += dist
+                    lastTrackedX = event.x
+                    lastTrackedY = event.y
+
                     strokeBuilder.addPoint(
                         Ink.Point.create(event.x, event.y, System.currentTimeMillis())
                     )
@@ -105,14 +101,45 @@ class GestureHandler(context: Context) {
             }
 
             MotionEvent.ACTION_UP -> {
+                velocityTracker?.computeCurrentVelocity(1000)
+                val vx = velocityTracker?.xVelocity ?: 0f
+                val vy = velocityTracker?.yVelocity ?: 0f
+                val dx = event.x - startX
+                val dy = event.y - startY
+                val absDx = abs(dx)
+                val absDy = abs(dy)
+
+                val dist = hypot(event.x - lastTrackedX, event.y - lastTrackedY)
+                totalPathLength += dist
+
+                val straightLineDistance = hypot(dx, dy)
+
+                // A gesture is classified as a backspace ONLY if:
+                // 1. It is horizontally leftward (dx < 0)
+                // 2. It is horizontally dominant (absDx > absDy * 2f)
+                val isStraightLine = straightLineDistance > 0 && totalPathLength < straightLineDistance * 1.3f
+
+                // Backspace is classified ONLY on ACTION_UP based on the final completed stroke.
+                // It must be leftward (dx < 0), horizontally dominant (absDx > absDy * 2f),
+                // and exceed either a deliberate long distance (80 dp) or a quick flick distance/velocity (35 dp / vx < -700f).
+                val isBackspace = dx < 0 &&
+                        absDx > absDy * 2f &&
+                        isStraightLine &&
+                        (absDx > 80 * density || (absDx > 35 * density && vx < -700f))
+
+                val isForwardSwipe = dx > 0 &&
+                        absDx > absDy * 2f &&
+                        isStraightLine &&
+                        (absDx > 80 * density || (absDx > 35 * density && vx > 700f))
+
                 if (isSwipeGesture) {
-                    velocityTracker?.computeCurrentVelocity(1000)
-                    val vy = velocityTracker?.yVelocity ?: 0f
                     if (vy < -200) onSwipeUp?.invoke()
-                } else if (isBackspaceGesture) {
+                } else if (isBackspace || isBackspaceGesture) {
                     // Invoke the callback wired by DrawingOverlay — see that file for
                     // ink cleanup and canvas reset before the ViewModel is notified.
                     onBackspace?.invoke()
+                } else if (isForwardSwipe) {
+                    onForwardSwipe?.invoke()
                 } else {
                     strokeBuilder.addPoint(
                         Ink.Point.create(event.x, event.y, System.currentTimeMillis())
