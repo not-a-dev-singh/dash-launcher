@@ -4,6 +4,8 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.net.Uri
+import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -52,12 +54,48 @@ class AppRepository(private val context: Context) {
     }
 
     fun getPinnedPackages(): List<String> {
-        val raw = prefs.getString(PINNED_PACKAGES_KEY, "") ?: ""
+        val raw = prefs.getString(PINNED_PACKAGES_KEY, null)
+        if (raw == null) {
+            val defaults = getDefaultPackages()
+            savePinnedPackages(defaults)
+            return defaults
+        }
         val normalized = normalizePinnedPackages(raw)
         if (raw != normalized.joinToString(",")) {
             savePinnedPackages(normalized)
         }
         return normalized
+    }
+
+    private fun getDefaultPackages(): List<String> {
+        val pm = context.packageManager
+        val defaults = mutableListOf<String>()
+
+        // 1. Dialer
+        val dialerIntent = Intent(Intent.ACTION_DIAL)
+        val dialerResolve = pm.resolveActivity(dialerIntent, 0)
+        dialerResolve?.activityInfo?.packageName?.let { defaults.add(it) }
+
+        // 2. Messages
+        val smsIntent = Intent(Intent.ACTION_SENDTO).apply {
+            data = Uri.parse("smsto:")
+        }
+        val smsResolve = pm.resolveActivity(smsIntent, 0)
+        smsResolve?.activityInfo?.packageName?.let { defaults.add(it) }
+
+        // 3. Browser
+        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"))
+        val browserResolve = pm.resolveActivity(browserIntent, 0)
+        browserResolve?.activityInfo?.packageName?.let { defaults.add(it) }
+
+        // 4. Camera
+        val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+        val cameraResolve = pm.resolveActivity(cameraIntent, 0)
+        cameraResolve?.activityInfo?.packageName?.let { defaults.add(it) }
+
+        // Remove duplicates and empty packages, pad to 4
+        val uniqueDefaults = defaults.filter { it.isNotEmpty() }.distinct().take(PINNED_SLOT_COUNT)
+        return uniqueDefaults + List((PINNED_SLOT_COUNT - uniqueDefaults.size).coerceAtLeast(0)) { "" }
     }
 
     fun savePinnedPackages(packages: List<String>) {

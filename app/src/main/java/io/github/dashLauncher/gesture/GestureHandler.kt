@@ -38,6 +38,7 @@ class GestureHandler(context: Context) {
     // and LauncherViewModel (state) respectively — see those files.
     // -------------------------------------------------------------------------
     var onBackspace: (() -> Unit)? = null
+    var onForwardSwipe: (() -> Unit)? = null
 
     fun onTouchEvent(event: MotionEvent): Boolean {
         velocityTracker = velocityTracker ?: VelocityTracker.obtain()
@@ -126,12 +127,19 @@ class GestureHandler(context: Context) {
                         isStraightLine &&
                         (absDx > 80 * density || (absDx > 35 * density && vx < -700f))
 
+                val isForwardSwipe = dx > 0 &&
+                        absDx > absDy * 2f &&
+                        isStraightLine &&
+                        (absDx > 80 * density || (absDx > 35 * density && vx > 700f))
+
                 if (isSwipeGesture) {
                     if (vy < -200) onSwipeUp?.invoke()
                 } else if (isBackspace || isBackspaceGesture) {
                     // Invoke the callback wired by DrawingOverlay — see that file for
                     // ink cleanup and canvas reset before the ViewModel is notified.
                     onBackspace?.invoke()
+                } else if (isForwardSwipe) {
+                    onForwardSwipe?.invoke()
                 } else {
                     strokeBuilder.addPoint(
                         Ink.Point.create(event.x, event.y, System.currentTimeMillis())

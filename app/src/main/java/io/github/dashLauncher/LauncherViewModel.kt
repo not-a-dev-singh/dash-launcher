@@ -236,6 +236,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         loadApps()
     }
 
+    fun pinApps(packageNames: List<String>) {
+        val padded = packageNames.take(4) + List((4 - packageNames.size).coerceAtLeast(0)) { "" }
+        repo.savePinnedPackages(padded)
+        loadApps()
+    }
+
     fun unpinApp(slotIndex: Int) {
         repo.unpinApp(slotIndex)
         loadApps()

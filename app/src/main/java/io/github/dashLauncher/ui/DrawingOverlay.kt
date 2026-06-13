@@ -46,6 +46,10 @@ fun DrawingOverlay(
     val density = LocalDensity.current
     val touchSlopPx = with(density) { 8.dp.toPx() }
 
+    val displayMetrics = context.resources.displayMetrics
+    val screenWidthPx = displayMetrics.widthPixels
+    val edgeMarginPx = with(density) { 30.dp.toPx() }
+
     val idleHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     // rememberUpdatedState ensures the Runnable always calls the latest lambda reference
     // even when the parent recomposes with a new onCommitActiveScribble instance
@@ -93,6 +97,13 @@ fun DrawingOverlay(
             gestureHandler.reset()  // clears inkBuilder so next scribble starts fresh
             onBackspace()
         }
+        gestureHandler.onForwardSwipe = {
+            idleHandler.removeCallbacks(recognizeRunnable)
+            idleHandler.removeCallbacks(idleRunnable)
+            pendingInk[0] = null
+            points.clear()
+            gestureHandler.reset()
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -127,19 +138,20 @@ fun DrawingOverlay(
                     val downEvent = awaitPointerEvent(PointerEventPass.Initial)
                     val downChange = downEvent.changes.first()
                     val startPos = downChange.position
+                    val isNearEdge = startPos.x < edgeMarginPx || startPos.x > screenWidthPx - edgeMarginPx
                     
                     // Force interception if there is active, uncommitted ink on the canvas.
                     // This ensures that mid-scribble taps (e.g. dotting an "i") are treated as drawing,
                     // while taps after the idle timer commits and clears the ink are treated as clicks.
-                    var isIntercepted = points.isNotEmpty()
+                    var isIntercepted = points.isNotEmpty() && !isNearEdge
                     if (isIntercepted) {
                         downChange.consume()
                     }
 
                     val downMotionEvent = downEvent.motionEvent
-                    // Skip forwarding while a pin drag is active — prevents the overlay
+                    // Skip forwarding while a pin drag is active or touch starts near edge — prevents the overlay
                     // from classifying the drag start as an ink stroke.
-                    if (downMotionEvent != null && !isInputSuspended()) {
+                    if (downMotionEvent != null && !isInputSuspended() && !isNearEdge) {
                         idleHandler.removeCallbacks(idleRunnable)
                         gestureHandler.onTouchEvent(downMotionEvent)
                     }
@@ -172,7 +184,7 @@ fun DrawingOverlay(
                         // guard. Without it, the first 8dp of finger movement after a long-press
                         // sets isIntercepted = true and DrawingOverlay consumes all subsequent
                         // move events, silently aborting detectDragGesturesAfterLongPress.
-                        if (!isIntercepted && !isInputSuspended() &&
+                        if (!isIntercepted && !isInputSuspended() && !isNearEdge &&
                             (diffX > touchSlopPx || diffY > touchSlopPx)
                         ) {
                             isIntercepted = true

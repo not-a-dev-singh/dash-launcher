@@ -2,6 +2,7 @@ package io.github.dashLauncher
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import io.github.dashLauncher.recognition.InkRecognitionManager
 import io.github.dashLauncher.ui.LauncherRoot
+import io.github.dashLauncher.ui.FavoriteAppsSetupScreen
 import io.github.dashLauncher.ui.theme.DefaultTheme
 import android.app.AppOpsManager
 import android.content.BroadcastReceiver
@@ -89,15 +91,22 @@ class MainActivity : ComponentActivity() {
                         !hasUsageAccess() && !hasSeenUsageIntro()
                     )
                 }
+                var showFavoriteAppsSetup by remember {
+                    mutableStateOf(
+                        !showUsageIntro && !hasSeenFavoriteAppsIntro()
+                    )
+                }
 
                 LaunchedEffect(showUsageIntro) {
-                    if (!showUsageIntro && !hasUsageAccess()) {
-                        // If the intro is dismissed, move straight into the launcher
-                        // shell so the user can still see the app even without access.
+                    if (!showUsageIntro) {
+                        showFavoriteAppsSetup = !hasSeenFavoriteAppsIntro()
                     }
                 }
 
                 if (showUsageIntro) {
+                    BackHandler(enabled = true) {
+                        // Consume back press to prevent native back gesture flicker
+                    }
                     UsageAccessIntroScreen(
                         onContinue = {
                             markUsageIntroSeen()
@@ -109,7 +118,26 @@ class MainActivity : ComponentActivity() {
                             showUsageIntro = false
                         }
                     )
+                } else if (showFavoriteAppsSetup) {
+                    BackHandler(enabled = true) {
+                        // Consume back press to prevent native back gesture flicker
+                    }
+                    FavoriteAppsSetupScreen(
+                        allApps = state.allApps,
+                        onDone = { selected ->
+                            viewModel.pinApps(selected)
+                            markFavoriteAppsIntroSeen()
+                            showFavoriteAppsSetup = false
+                        }
+                    )
                 } else {
+                    BackHandler(enabled = true) {
+                        if (state.showAllApps) {
+                            viewModel.setShowAllApps(false)
+                        } else {
+                            // Consume back press on main home screen to prevent native back gesture transition/flicker
+                        }
+                    }
                     LauncherRoot(
                         state = state,
                         inkManager = inkManager,
@@ -191,8 +219,17 @@ class MainActivity : ComponentActivity() {
         prefs.edit().putBoolean(KEY_USAGE_INTRO_SEEN, true).apply()
     }
 
+    private fun hasSeenFavoriteAppsIntro(): Boolean {
+        return prefs.getBoolean(KEY_FAVORITE_APPS_INTRO_SEEN, false)
+    }
+
+    private fun markFavoriteAppsIntroSeen() {
+        prefs.edit().putBoolean(KEY_FAVORITE_APPS_INTRO_SEEN, true).apply()
+    }
+
     companion object {
         private const val KEY_USAGE_INTRO_SEEN = "usage_intro_seen_v1"
+        private const val KEY_FAVORITE_APPS_INTRO_SEEN = "favorite_apps_intro_seen_v1"
     }
 }
 

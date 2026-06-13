@@ -12,6 +12,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.*
@@ -80,6 +83,12 @@ fun LauncherRoot(
                     },
                     modifier = Modifier.padding(start = LauncherHorizontalInset, end = LauncherHorizontalInset, top = 4.dp),
                     extraContent = topBarContent
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = LauncherHorizontalInset, vertical = 8.dp),
+                    color = Color.White.copy(alpha = 0.10f),
+                    thickness = 1.dp
                 )
 
                 // Main App List (Suggestions or Recent)
@@ -245,7 +254,7 @@ private fun LauncherTopBar(
                 ModelDownloadBanner(status = modelDownloadStatus)
             }
             else -> {
-                ReservedTopBarHint()
+                DateHeader()
             }
         }
 
@@ -254,18 +263,33 @@ private fun LauncherTopBar(
 }
 
 @Composable
-private fun ReservedTopBarHint() {
+private fun DateHeader() {
+    val currentDate = remember { java.time.LocalDate.now() }
+    val formatter = remember {
+        java.time.format.DateTimeFormatter.ofPattern("EEEE, MMMM d", java.util.Locale.getDefault())
+    }
+    val formattedDate = currentDate.format(formatter)
+
     Box(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.CenterStart
+        .fillMaxSize()
+        .padding(horizontal = 20.dp, vertical = 15.dp),
+        // .border(
+        //     width = 1.dp,
+        //     color = Color.White,
+        //     shape = RoundedCornerShape(0.dp)
+        // ),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .size(width = 72.dp, height = 4.dp)
-                .background(Color.White.copy(alpha = 0.10f), RectangleShape)
-        )
+        Text(
+            text = formattedDate,
+            color = Color.White,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.25.sp,
+            // style = TextStyle(
+                // textDecoration = TextDecoration.Underline
+            )
     }
 }
 
@@ -291,9 +315,9 @@ private fun SwipeUpHint(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "S W I P E",
+            text = "S W I P E - U P",
             color = Color.White.copy(alpha = alpha),
-            fontSize = 8.sp,
+            fontSize = 10.sp,
             fontWeight = FontWeight.Light,
             letterSpacing = 6.sp // Wide letter spacing for premium typography
         )
