@@ -24,7 +24,7 @@ change is explicitly requested.
 
 ### Product
 
-- Android launcher called Dash Launcher.
+- Android launcher called zHome Launcher.
 - Full-screen, black, minimalist launcher built around scribble-to-search.
 - Primary input method is freehand handwriting recognition, not typing.
 

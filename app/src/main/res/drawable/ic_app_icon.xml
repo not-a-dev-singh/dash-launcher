@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="512dp"
+    android:height="512dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <!-- Background -->
+    <path
+        android:pathData="M112,0 Q0,0 0,112 L0,400 Q0,512 112,512 L400,512 Q512,512 512,400 L512,112 Q512,0 400,0 Z"
+        android:fillColor="#0E0E0E" />
+
+    <!-- Border -->
+    <path
+        android:pathData="M113,4 Q4,4 4,113 L4,399 Q4,508 113,508 L399,508 Q508,508 508,399 L508,113 Q508,4 399,4 Z"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#2A2A2A"
+        android:strokeWidth="2" />
+
+    <!-- Scribble Z - Top horizontal stroke -->
+    <path
+        android:pathData="M118,158 Q180,145 256,152 Q310,158 394,152"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="28"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Scribble Z - Diagonal stroke -->
+    <path
+        android:pathData="M394,152 Q296,220 240,276 Q186,330 118,360"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="24"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:alpha="0.9" />
+
+    <!-- Scribble Z - Bottom horizontal stroke -->
+    <path
+        android:pathData="M118,360 Q204,344 270,350 Q330,355 394,344"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="28"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Ink dot (purple) - converted from circle to path -->
+    <path
+        android:pathData="M394,326 A18,18 0 1,0 394,362 A18,18 0 1,0 394,326"
+        android:fillColor="#A78BFA" />
+
+    <!-- Ink trail (faded purple) -->
+    <path
+        android:pathData="M394,344 Q418,318 412,290"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#A78BFA"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:alpha="0.5" />
+
+</vector>

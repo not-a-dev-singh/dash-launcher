@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">Z Home</string>
+    <string name="app_name">zHome</string>
+    <string name="app_tagline">DRAW TO LAUNCH</string>
 </resources>
