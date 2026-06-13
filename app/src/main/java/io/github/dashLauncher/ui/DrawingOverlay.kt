@@ -127,7 +127,14 @@ fun DrawingOverlay(
                     val downEvent = awaitPointerEvent(PointerEventPass.Initial)
                     val downChange = downEvent.changes.first()
                     val startPos = downChange.position
-                    var isIntercepted = false
+                    
+                    // Force interception if there is active, uncommitted ink on the canvas.
+                    // This ensures that mid-scribble taps (e.g. dotting an "i") are treated as drawing,
+                    // while taps after the idle timer commits and clears the ink are treated as clicks.
+                    var isIntercepted = points.isNotEmpty()
+                    if (isIntercepted) {
+                        downChange.consume()
+                    }
 
                     val downMotionEvent = downEvent.motionEvent
                     // Skip forwarding while a pin drag is active — prevents the overlay
