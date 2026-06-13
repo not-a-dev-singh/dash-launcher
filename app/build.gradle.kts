@@ -13,7 +13,7 @@ val keystoreProperties = Properties().apply {
 }
 
 android {
-    namespace = "io.github.dashLauncher"
+    namespace = "io.github.zHomeLauncher"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -21,7 +21,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "io.github.dashLauncher"
+        applicationId = "io.github.zHomeLauncher"
         minSdk = 28
         targetSdk = 36
         versionCode = 1

@@ -1,16 +1,16 @@
-# Dash Launcher
-
+# zHome Launcher
+## Draw. Launch. Done
 A minimalist Android launcher built around **intent-driven interaction**. Instead of hunting through menus, you simply write the app name directly on your screen.
 
 ## Philosophy
 
-Modern smartphone launchers often claim to be minimal, yet strip away so much functionality that users end up spending just as much time searching—now with an added layer of UI clutter. **Dash takes a different approach.**
+Modern smartphone launchers often claim to be minimal, yet strip away so much functionality that users end up spending just as much time searching—now with an added layer of UI clutter. **zHome takes a different approach.**
 
 The core premise: **You know what app you want. Start writing.**
 
 No keyboard pop-ups. No search buttons to tap. No animations to wait through. Just your intention, translated directly into action. The launcher respects focused, single-handed use and assumes the user has a goal—not a browsing habit.
 
-Inspired by the original **Nokia Z Launcher**, Dash is built for people who want their phone to get out of the way.
+Inspired by the original **Nokia Z Launcher**, zHome is built for people who want their phone to get out of the way.
 
 ## Features
 
@@ -74,12 +74,12 @@ Up to 15 results are shown at any time.
 ./gradlew installDebug
 ```
 
-Then set Dash as your default launcher in system settings.
+Then set zHome as your default launcher in system settings.
 
 ### Permissions
-On first launch, you'll be prompted to grant **Usage Access** permission. This allows Dash to see which apps you use most, so they appear at the top of your list.
+On first launch, you'll be prompted to grant **Usage Access** permission. This allows zHome to see which apps you use most, so they appear at the top of your list.
 
-On the first run, Dash also downloads the **English (US)** handwriting model (`en-US`) from ML Kit. While that happens, the launcher shows a readiness banner with a progress indicator and an estimated time remaining. Once the model is ready, handwriting recognition becomes available automatically.
+On the first run, zHome also downloads the **English (US)** handwriting model (`en-US`) from ML Kit. While that happens, the launcher shows a readiness banner with a progress indicator and an estimated time remaining. Once the model is ready, handwriting recognition becomes available automatically.
 
 ## Architecture
 
@@ -102,7 +102,7 @@ For full technical details, see [`SPEC.md`](SPEC.md).
 ## Philosophy in Practice
 
 ### Why no animations?
-Animations create the illusion of activity but add latency. Dash prioritizes responsiveness over visual polish.
+Animations create the illusion of activity but add latency. zHome prioritizes responsiveness over visual polish.
 
 ### Why full-screen black?
 Reduces cognitive load. There's nothing competing for your attention except your task.
@@ -125,4 +125,4 @@ MIT License — see [`LICENSE`](LICENSE) for details.
 
 ---
 
-**Dash is for people who know what they want to do. Let's get there.**
+**zHome is for people who know what they want to do. Let's get there.**

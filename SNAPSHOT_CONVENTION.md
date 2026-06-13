@@ -151,21 +151,21 @@ change is explicitly requested.
 
 ## File Reference Map
 
-- `/app/src/main/java/io/github/dashLauncher/MainActivity.kt`
+- `/app/src/main/java/io/github/zHomeLauncher/MainActivity.kt`
   - app entry point, permission checks, lifecycle registration
-- `/app/src/main/java/io/github/dashLauncher/LauncherViewModel.kt`
+- `/app/src/main/java/io/github/zHomeLauncher/LauncherViewModel.kt`
   - launcher state, filtering, pinning, launching, scribble handling
-- `/app/src/main/java/io/github/dashLauncher/data/AppRepository.kt`
+- `/app/src/main/java/io/github/zHomeLauncher/data/AppRepository.kt`
   - installed-app loading, usage stats, pinned slot persistence
-- `/app/src/main/java/io/github/dashLauncher/recognition/InkRecognitionManager.kt`
+- `/app/src/main/java/io/github/zHomeLauncher/recognition/InkRecognitionManager.kt`
   - ML Kit model download and handwriting recognition
-- `/app/src/main/java/io/github/dashLauncher/ui/LauncherRoot.kt`
+- `/app/src/main/java/io/github/zHomeLauncher/ui/LauncherRoot.kt`
   - top-level UI composition and interaction routing
-- `/app/src/main/java/io/github/dashLauncher/ui/AppGrid.kt`
+- `/app/src/main/java/io/github/zHomeLauncher/ui/AppGrid.kt`
   - app list and pinned-slot rendering
-- `/app/src/main/java/io/github/dashLauncher/ui/DrawingOverlay.kt`
+- `/app/src/main/java/io/github/zHomeLauncher/ui/DrawingOverlay.kt`
   - gesture interception, ink capture, and recognition debounce
-- `/app/src/main/java/io/github/dashLauncher/ui/AllAppScreen.kt`
+- `/app/src/main/java/io/github/zHomeLauncher/ui/AllAppScreen.kt`
   - All Apps overlay and inline pin/unpin actions
 - `/SPEC.md`
   - detailed feature specification and interaction rules
